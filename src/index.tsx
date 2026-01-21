@@ -30,7 +30,7 @@ export function testSherpaInit(): Promise<string> {
  * @param config - Model path configuration or simple string path
  * @returns Promise resolving to absolute path usable by native code
  */
-async function resolveModelPath(
+export async function resolveModelPath(
   config: InitializeOptions['modelPath']
 ): Promise<string> {
   // Backward compatibility: if string is passed, treat as auto

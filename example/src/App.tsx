@@ -11,8 +11,12 @@ import {
   testSherpaInit,
   initializeSherpaOnnx,
   unloadSherpaOnnx,
+  transcribeFile,
+  autoModelPath,
+  resolveModelPath,
 } from 'react-native-sherpa-onnx-stt';
 import { getModelPath, MODELS, type ModelId } from './modelConfig';
+import { getAudioFilesForModel, type AudioFileInfo } from './audioConfig';
 
 export default function App() {
   const [testResult, setTestResult] = useState<string | null>(null);
@@ -20,6 +24,13 @@ export default function App() {
   const [currentModel, setCurrentModel] = useState<ModelId | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAudio, setSelectedAudio] = useState<AudioFileInfo | null>(
+    null
+  );
+  const [transcriptionResult, setTranscriptionResult] = useState<string | null>(
+    null
+  );
+  const [transcribing, setTranscribing] = useState(false);
 
   const handleTest = async () => {
     setLoading(true);
@@ -96,6 +107,55 @@ export default function App() {
       setLoading(false);
     }
   };
+
+  const handleTranscribe = async () => {
+    if (!selectedAudio || !currentModel) {
+      setError('Please select a model and audio file first');
+      return;
+    }
+
+    setTranscribing(true);
+    setError(null);
+    setTranscriptionResult(null);
+
+    try {
+      // Resolve audio file path (using auto detection - tries asset first, then file system)
+      const audioPathConfig = autoModelPath(selectedAudio.id);
+      const resolvedAudioPath = await resolveModelPath(audioPathConfig);
+
+      // Transcribe the audio file
+      const result = await transcribeFile(resolvedAudioPath);
+      setTranscriptionResult(result);
+    } catch (err) {
+      console.error('Transcription error:', err);
+
+      let errorMessage = 'Unknown error';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        if ('code' in err) {
+          errorMessage = `[${err.code}] ${errorMessage}`;
+        }
+      } else if (typeof err === 'object' && err !== null) {
+        const errorObj = err as any;
+        errorMessage =
+          errorObj.message ||
+          errorObj.userInfo?.NSLocalizedDescription ||
+          JSON.stringify(err);
+        if (errorObj.code) {
+          errorMessage = `[${errorObj.code}] ${errorMessage}`;
+        }
+      }
+
+      setError(errorMessage);
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  // Get available audio files for current model
+  const availableAudioFiles = currentModel
+    ? getAudioFilesForModel(currentModel)
+    : [];
 
   return (
     <ScrollView
@@ -206,6 +266,85 @@ export default function App() {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>3. Transcribe Audio</Text>
+          <Text style={styles.hint}>
+            Select an audio file and transcribe it using the initialized model.
+          </Text>
+
+          {!currentModel && (
+            <View style={styles.warningContainer}>
+              <Text style={styles.warningText}>
+                Please initialize a model first
+              </Text>
+            </View>
+          )}
+
+          {currentModel && availableAudioFiles.length > 0 && (
+            <>
+              <Text style={styles.subsectionTitle}>Select Audio File:</Text>
+              <View style={styles.audioFilesContainer}>
+                {availableAudioFiles.map((audioFile) => (
+                  <TouchableOpacity
+                    key={audioFile.id}
+                    style={[
+                      styles.audioFileButton,
+                      selectedAudio?.id === audioFile.id &&
+                        styles.audioFileButtonActive,
+                    ]}
+                    onPress={() => setSelectedAudio(audioFile)}
+                  >
+                    <Text
+                      style={[
+                        styles.audioFileButtonText,
+                        selectedAudio?.id === audioFile.id &&
+                          styles.audioFileButtonTextActive,
+                      ]}
+                    >
+                      {audioFile.name}
+                    </Text>
+                    <Text style={styles.audioFileDescription}>
+                      {audioFile.description}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {selectedAudio && (
+                <TouchableOpacity
+                  style={[
+                    styles.button,
+                    (transcribing || loading) && styles.buttonDisabled,
+                  ]}
+                  onPress={handleTranscribe}
+                  disabled={transcribing || loading}
+                >
+                  {transcribing ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Transcribe Audio</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {transcriptionResult && (
+                <View style={styles.resultContainer}>
+                  <Text style={styles.resultLabel}>Transcription:</Text>
+                  <Text style={styles.resultText}>{transcriptionResult}</Text>
+                </View>
+              )}
+            </>
+          )}
+
+          {currentModel && availableAudioFiles.length === 0 && (
+            <View style={styles.warningContainer}>
+              <Text style={styles.warningText}>
+                No audio files available for this model
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
     </ScrollView>
   );
@@ -340,5 +479,55 @@ const styles = StyleSheet.create({
   },
   modelButtonTextActive: {
     color: '#2e7d32',
+  },
+  subsectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#555',
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  audioFilesContainer: {
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  audioFileButton: {
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    marginBottom: 10,
+  },
+  audioFileButtonActive: {
+    backgroundColor: '#e3f2fd',
+    borderColor: '#2196f3',
+  },
+  audioFileButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 4,
+  },
+  audioFileButtonTextActive: {
+    color: '#1976d2',
+  },
+  audioFileDescription: {
+    fontSize: 12,
+    color: '#999',
+  },
+  warningContainer: {
+    marginTop: 15,
+    padding: 12,
+    backgroundColor: '#fff3cd',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ffc107',
+  },
+  warningText: {
+    fontSize: 14,
+    color: '#856404',
+    textAlign: 'center',
   },
 });
