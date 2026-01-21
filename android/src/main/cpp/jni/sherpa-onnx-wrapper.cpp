@@ -272,15 +272,63 @@ bool SherpaOnnxWrapper::initialize(
                 LOGI("Auto-detected WeNet CTC model: %s (fallback detection)", ctcModelPath.c_str());
                 config.model_config.wenet_ctc.model = ctcModelPath;
                 modelConfigured = true;
-            } else if (!ctcModelPath.empty()) {
-                // Fallback: NeMo CTC model (model.onnx exists, but no Paraformer was detected)
-                LOGI("Auto-detected NeMo CTC model: %s (fallback detection)", ctcModelPath.c_str());
-                config.model_config.nemo_ctc.model = ctcModelPath;
-                modelConfigured = true;
+            } else {
+                // Fallback: Set all found files and let sherpa-onnx detect the model type from metadata
+                // This increases the chance of success for unknown model types
+                LOGI("No specific model type detected. Setting all found files and letting sherpa-onnx auto-detect from metadata");
+                
+                bool anyFileSet = false;
+                
+                // Set transducer files if present
+                if (hasTransducer) {
+                    config.model_config.transducer.encoder = encoderPath;
+                    config.model_config.transducer.decoder = decoderPath;
+                    config.model_config.transducer.joiner = joinerPath;
+                    anyFileSet = true;
+                    LOGI("Set transducer files: encoder=%s, decoder=%s, joiner=%s", 
+                         encoderPath.c_str(), decoderPath.c_str(), joinerPath.c_str());
+                }
+                
+                // Set Whisper files if present (encoder + decoder, no joiner)
+                if (hasWhisper) {
+                    std::string whisperEncoder = fileExists(encoderPathInt8) ? encoderPathInt8 : encoderPath;
+                    std::string whisperDecoder = fileExists(decoderPathInt8) ? decoderPathInt8 : decoderPath;
+                    config.model_config.whisper.encoder = whisperEncoder;
+                    config.model_config.whisper.decoder = whisperDecoder;
+                    config.model_config.whisper.language = "en"; // Default
+                    config.model_config.whisper.task = "transcribe"; // Default
+                    anyFileSet = true;
+                    LOGI("Set Whisper files: encoder=%s, decoder=%s", 
+                         whisperEncoder.c_str(), whisperDecoder.c_str());
+                }
+                
+                // Set Paraformer model if present
+                if (!paraformerModelPath.empty()) {
+                    config.model_config.paraformer.model = paraformerModelPath;
+                    anyFileSet = true;
+                    LOGI("Set Paraformer model: %s", paraformerModelPath.c_str());
+                }
+                
+                // Set CTC models if present (try all CTC types)
+                if (!ctcModelPath.empty()) {
+                    // Set all CTC model types - sherpa-onnx will use the correct one based on metadata
+                    config.model_config.nemo_ctc.model = ctcModelPath;
+                    config.model_config.wenet_ctc.model = ctcModelPath;
+                    // Note: We could also set tdnn, zipformer_ctc, telespeech_ctc here
+                    // but those are less common, so we'll let sherpa-onnx handle them
+                    anyFileSet = true;
+                    LOGI("Set CTC model files: %s (will be detected as NeMo CTC, WeNet CTC, or other CTC type from metadata)", 
+                         ctcModelPath.c_str());
+                }
+                
+                if (anyFileSet) {
+                    modelConfigured = true;
+                    LOGI("Fallback: All found files set. sherpa-onnx will detect model type from metadata.");
+                }
             }
         }
         
-        // Set tokens if required
+        // Set tokens if required or if available (for fallback mode)
         if (tokensRequired) {
             if (!fileExists(tokensPath)) {
                 LOGE("Tokens file not found: %s", tokensPath.c_str());
@@ -288,6 +336,10 @@ bool SherpaOnnxWrapper::initialize(
             }
             config.model_config.tokens = tokensPath;
             LOGI("Using tokens file: %s", tokensPath.c_str());
+        } else if (modelConfigured && fileExists(tokensPath)) {
+            // In fallback mode, set tokens.txt if available (many models need it)
+            config.model_config.tokens = tokensPath;
+            LOGI("Using tokens file (fallback mode): %s", tokensPath.c_str());
         }
         
         if (!modelConfigured) {
