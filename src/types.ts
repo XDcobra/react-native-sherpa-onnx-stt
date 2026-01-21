@@ -31,7 +31,13 @@ export type ModelPathConfig =
 /**
  * Model type for explicit model detection
  */
-export type ModelType = 'transducer' | 'paraformer' | 'nemo_ctc' | 'auto';
+export type ModelType =
+  | 'transducer'
+  | 'paraformer'
+  | 'nemo_ctc'
+  | 'whisper'
+  | 'wenet_ctc'
+  | 'auto';
 
 /**
  * Model initialization options
@@ -56,6 +62,7 @@ export interface InitializeOptions {
    * - 'paraformer': Force detection as Paraformer model
    * - 'nemo_ctc': Force detection as NeMo CTC model
    * - 'whisper': Force detection as Whisper model
+   * - 'wenet_ctc': Force detection as WeNet CTC model
    * - 'auto': Automatic detection based on files (default)
    */
   modelType?: ModelType;

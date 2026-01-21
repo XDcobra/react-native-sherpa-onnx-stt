@@ -72,6 +72,14 @@ For smaller models that can be bundled with your app:
      └── tokens.txt            (REQUIRED)
    ```
 
+   **For WeNet CTC models:**
+
+   ```
+   android/app/src/main/assets/models/sherpa-onnx-wenetspeech-ctc-zh-en-cantonese/
+     ├── model.onnx            (or model.int8.onnx for quantized)
+     └── tokens.txt            (REQUIRED)
+   ```
+
    **Note:** The library automatically detects and prefers quantized `.int8.onnx` models when available. You can control this behavior with the `preferInt8` option (see Usage section).
 
 2. Model will be available at: `assets/models/sherpa-onnx-zipformer-small-en`

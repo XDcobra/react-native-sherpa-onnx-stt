@@ -81,16 +81,18 @@ export const AUDIO_FILES: AudioFileInfo[] = [
  * - Paraformer: All files (English and Chinese) - supports both languages
  * - NeMo CTC: English files only
  * - Whisper: English files only
+ * - WeNet CTC: All files (Chinese, English, Cantonese) - supports multiple languages
  */
 export function getAudioFilesForModel(modelId: string): AudioFileInfo[] {
   const isParaformer = modelId.includes('paraformer');
   const isZipformer = modelId.includes('zipformer');
-  const isNemoCtc = modelId.includes('nemo') || modelId.includes('ctc');
+  const isNemoCtc = modelId.includes('nemo') && modelId.includes('ctc');
+  const isWenetCtc = modelId.includes('wenet') && modelId.includes('ctc');
   const isWhisper = modelId.includes('whisper');
-  const isEnglish = modelId.includes('en') && !isParaformer;
+  const isEnglish = modelId.includes('en') && !isParaformer && !isWenetCtc;
 
-  // Paraformer supports both English and Chinese
-  if (isParaformer) {
+  // Paraformer and WeNet CTC support multiple languages
+  if (isParaformer || isWenetCtc) {
     return AUDIO_FILES;
   }
 

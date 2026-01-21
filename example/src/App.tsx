@@ -72,7 +72,9 @@ export default function App() {
           ? 'Chinese (Paraformer)'
           : modelId === MODELS.NEMO_CTC_EN
           ? 'English (NeMo CTC)'
-          : 'English (Whisper)';
+          : modelId === MODELS.WHISPER_EN
+          ? 'English (Whisper)'
+          : 'Chinese/English/Cantonese (WeNet CTC)';
 
       setCurrentModel(modelId);
       setInitResult(`Initialized: ${modelName}`);
@@ -205,6 +207,8 @@ export default function App() {
                 currentModel === MODELS.NEMO_CTC_EN ||
                 currentModel === MODELS.WHISPER_EN
                   ? 'English'
+                  : currentModel === MODELS.WENET_CTC_ZH_EN_CANTONESE
+                  ? 'Chinese/English/Cantonese'
                   : 'Chinese'}
               </Text>
             </View>
@@ -290,6 +294,27 @@ export default function App() {
                 ]}
               >
                 English (Whisper)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modelButton,
+                currentModel === MODELS.WENET_CTC_ZH_EN_CANTONESE &&
+                  styles.modelButtonActive,
+                loading && styles.buttonDisabled,
+              ]}
+              onPress={() => handleInitialize(MODELS.WENET_CTC_ZH_EN_CANTONESE)}
+              disabled={loading}
+            >
+              <Text
+                style={[
+                  styles.modelButtonText,
+                  currentModel === MODELS.WENET_CTC_ZH_EN_CANTONESE &&
+                    styles.modelButtonTextActive,
+                ]}
+              >
+                中英粤 (WeNet CTC)
               </Text>
             </TouchableOpacity>
           </View>

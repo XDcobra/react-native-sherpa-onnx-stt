@@ -178,10 +178,12 @@ bool SherpaOnnxWrapper::initialize(
         bool hasWhisperDecoder = fileExists(decoderPath) || fileExists(decoderPathInt8);
         bool hasWhisper = hasWhisperEncoder && hasWhisperDecoder && !fileExists(joinerPath);
         
-        // Check if directory name suggests CTC model (contains "nemo", "ctc", "parakeet")
-        bool isLikelyCtc = modelDir.find("nemo") != std::string::npos ||
-                           modelDir.find("ctc") != std::string::npos ||
-                           modelDir.find("parakeet") != std::string::npos;
+        // Check if directory name suggests NeMo CTC model (contains "nemo", "parakeet")
+        bool isLikelyNemoCtc = modelDir.find("nemo") != std::string::npos ||
+                                modelDir.find("parakeet") != std::string::npos;
+        
+        // Check if directory name suggests WeNet CTC model (contains "wenet")
+        bool isLikelyWenetCtc = modelDir.find("wenet") != std::string::npos;
         
         // Check if directory name suggests Whisper model
         bool isLikelyWhisper = modelDir.find("whisper") != std::string::npos;
@@ -204,6 +206,10 @@ bool SherpaOnnxWrapper::initialize(
             } else if (type == "nemo_ctc" && !ctcModelPath.empty()) {
                 LOGI("Using explicit NeMo CTC model type: %s", ctcModelPath.c_str());
                 config.model_config.nemo_ctc.model = ctcModelPath;
+                modelConfigured = true;
+            } else if (type == "wenet_ctc" && !ctcModelPath.empty()) {
+                LOGI("Using explicit WeNet CTC model type: %s", ctcModelPath.c_str());
+                config.model_config.wenet_ctc.model = ctcModelPath;
                 modelConfigured = true;
             } else if (type == "whisper" && hasWhisper) {
                 LOGI("Using explicit Whisper model type");
@@ -246,8 +252,13 @@ bool SherpaOnnxWrapper::initialize(
                 // Whisper can use tokens.txt if present, but it's optional
                 tokensRequired = fileExists(tokensPath);
                 modelConfigured = true;
-            } else if (!ctcModelPath.empty() && isLikelyCtc) {
-                // NeMo CTC model (model.onnx exists and directory name suggests CTC)
+            } else if (!ctcModelPath.empty() && isLikelyWenetCtc) {
+                // WeNet CTC model (model.onnx exists and directory name suggests WeNet)
+                LOGI("Auto-detected WeNet CTC model: %s (detected by directory name)", ctcModelPath.c_str());
+                config.model_config.wenet_ctc.model = ctcModelPath;
+                modelConfigured = true;
+            } else if (!ctcModelPath.empty() && isLikelyNemoCtc) {
+                // NeMo CTC model (model.onnx exists and directory name suggests NeMo CTC)
                 LOGI("Auto-detected NeMo CTC model: %s (detected by directory name)", ctcModelPath.c_str());
                 config.model_config.nemo_ctc.model = ctcModelPath;
                 modelConfigured = true;
@@ -255,6 +266,11 @@ bool SherpaOnnxWrapper::initialize(
                 // Paraformer model (has model.onnx, and directory name doesn't suggest CTC)
                 LOGI("Auto-detected Paraformer model: %s", paraformerModelPath.c_str());
                 config.model_config.paraformer.model = paraformerModelPath;
+                modelConfigured = true;
+            } else if (!ctcModelPath.empty() && isLikelyWenetCtc) {
+                // Fallback: WeNet CTC model (model.onnx exists, directory name suggests WeNet)
+                LOGI("Auto-detected WeNet CTC model: %s (fallback detection)", ctcModelPath.c_str());
+                config.model_config.wenet_ctc.model = ctcModelPath;
                 modelConfigured = true;
             } else if (!ctcModelPath.empty()) {
                 // Fallback: NeMo CTC model (model.onnx exists, but no Paraformer was detected)
@@ -286,7 +302,7 @@ bool SherpaOnnxWrapper::initialize(
             LOGE("  Decoder: %s (exists: %s)", decoderPath.c_str(), fileExists(decoderPath) ? "yes" : "no");
             LOGE("  Decoder (int8): %s (exists: %s)", decoderPathInt8.c_str(), fileExists(decoderPathInt8) ? "yes" : "no");
             LOGE("  Joiner: %s (exists: %s)", joinerPath.c_str(), fileExists(joinerPath) ? "yes" : "no");
-            LOGE("Expected transducer model (encoder.onnx, decoder.onnx, joiner.onnx), whisper model (encoder.onnx, decoder.onnx), paraformer model (model.onnx or model.int8.onnx), or CTC model (model.onnx or model.int8.onnx)");
+            LOGE("Expected transducer model (encoder.onnx, decoder.onnx, joiner.onnx), whisper model (encoder.onnx, decoder.onnx), paraformer model (model.onnx or model.int8.onnx), NeMo CTC model (model.onnx or model.int8.onnx), or WeNet CTC model (model.onnx or model.int8.onnx)");
             return false;
         }
 
