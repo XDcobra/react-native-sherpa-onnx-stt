@@ -10,8 +10,17 @@ export interface Spec extends TurboModule {
   testSherpaInit(): Promise<string>;
 
   /**
+   * Resolve model path based on configuration.
+   * Handles asset paths, file system paths, and auto-detection.
+   * Returns an absolute path that can be used by native code.
+   *
+   * @param config - Object with 'type' ('asset' | 'file' | 'auto') and 'path' (string)
+   */
+  resolveModelPath(config: { type: string; path: string }): Promise<string>;
+
+  /**
    * Initialize sherpa-onnx with model directory.
-   * Phase 1: Stub implementation.
+   * Expects an absolute path (use resolveModelPath first for asset/file paths).
    */
   initializeSherpaOnnx(modelDir: string): Promise<void>;
 

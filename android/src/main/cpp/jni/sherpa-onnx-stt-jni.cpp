@@ -32,22 +32,23 @@ Java_com_sherpaonnxstt_SherpaOnnxSttModule_nativeInitialize(
 
         const char *modelDirStr = env->GetStringUTFChars(modelDir, nullptr);
         if (modelDirStr == nullptr) {
-            LOGE("Failed to get modelDir string");
+            LOGE("Failed to get modelDir string from JNI");
             return JNI_FALSE;
         }
 
-        bool result = g_wrapper->initialize(std::string(modelDirStr));
+        std::string modelDirPath(modelDirStr);
+        bool result = g_wrapper->initialize(modelDirPath);
         env->ReleaseStringUTFChars(modelDir, modelDirStr);
 
-        if (result) {
-            LOGI("Native initialization successful");
-            return JNI_TRUE;
-        } else {
-            LOGE("Native initialization failed");
-            return JNI_FALSE;
+        if (!result) {
+            LOGE("Native initialization failed for: %s", modelDirPath.c_str());
         }
+        return result ? JNI_TRUE : JNI_FALSE;
     } catch (const std::exception &e) {
         LOGE("Exception in nativeInitialize: %s", e.what());
+        return JNI_FALSE;
+    } catch (...) {
+        LOGE("Unknown exception in nativeInitialize");
         return JNI_FALSE;
     }
 }
@@ -86,7 +87,6 @@ Java_com_sherpaonnxstt_SherpaOnnxSttModule_nativeRelease(
     try {
         if (g_wrapper != nullptr) {
             g_wrapper->release();
-            LOGI("Native resources released");
         }
     } catch (const std::exception &e) {
         LOGE("Exception in nativeRelease: %s", e.what());
@@ -97,7 +97,6 @@ JNIEXPORT jstring JNICALL
 Java_com_sherpaonnxstt_SherpaOnnxSttModule_nativeTestSherpaInit(
     JNIEnv *env,
     jobject /* this */) {
-    LOGI("nativeTestSherpaInit called");
     return env->NewStringUTF("Sherpa ONNX loaded!");
 }
 

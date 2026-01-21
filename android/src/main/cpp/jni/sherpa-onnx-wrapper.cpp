@@ -34,11 +34,13 @@ SherpaOnnxWrapper::~SherpaOnnxWrapper() {
 
 bool SherpaOnnxWrapper::initialize(const std::string& modelDir) {
     if (pImpl->initialized) {
-        LOGI("Already initialized, releasing previous instance");
         release();
     }
 
-    LOGI("Initializing sherpa-onnx with modelDir: %s", modelDir.c_str());
+    if (modelDir.empty()) {
+        LOGE("Model directory is empty");
+        return false;
+    }
 
     // TODO: Implement actual sherpa-onnx initialization
     // Example:
@@ -52,7 +54,6 @@ bool SherpaOnnxWrapper::initialize(const std::string& modelDir) {
     // For now, just mark as initialized for testing
     pImpl->modelDir = modelDir;
     pImpl->initialized = true;
-    LOGI("Sherpa-onnx initialized successfully (stub)");
 
     return true;
 }
@@ -81,7 +82,6 @@ bool SherpaOnnxWrapper::isInitialized() const {
 
 void SherpaOnnxWrapper::release() {
     if (pImpl->initialized) {
-        LOGI("Releasing sherpa-onnx resources");
         // TODO: Release recognizer
         // pImpl->recognizer.reset();
         pImpl->initialized = false;
