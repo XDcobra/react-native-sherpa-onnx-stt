@@ -1,0 +1,104 @@
+// Include standard library headers first to avoid conflicts with jni.h
+#include <string>
+#include <memory>
+
+// Then include JNI headers
+#include <jni.h>
+#include <android/log.h>
+
+// Finally include our wrapper
+#include "sherpa-onnx-wrapper.h"
+
+#define LOG_TAG "SherpaOnnxSttJNI"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+using namespace sherpaonnxstt;
+
+// Global wrapper instance
+static std::unique_ptr<SherpaOnnxWrapper> g_wrapper = nullptr;
+
+extern "C" {
+
+JNIEXPORT jboolean JNICALL
+Java_com_sherpaonnxstt_SherpaOnnxSttModule_nativeInitialize(
+    JNIEnv *env,
+    jobject /* this */,
+    jstring modelDir) {
+    try {
+        if (g_wrapper == nullptr) {
+            g_wrapper = std::make_unique<SherpaOnnxWrapper>();
+        }
+
+        const char *modelDirStr = env->GetStringUTFChars(modelDir, nullptr);
+        if (modelDirStr == nullptr) {
+            LOGE("Failed to get modelDir string");
+            return JNI_FALSE;
+        }
+
+        bool result = g_wrapper->initialize(std::string(modelDirStr));
+        env->ReleaseStringUTFChars(modelDir, modelDirStr);
+
+        if (result) {
+            LOGI("Native initialization successful");
+            return JNI_TRUE;
+        } else {
+            LOGE("Native initialization failed");
+            return JNI_FALSE;
+        }
+    } catch (const std::exception &e) {
+        LOGE("Exception in nativeInitialize: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_sherpaonnxstt_SherpaOnnxSttModule_nativeTranscribeFile(
+    JNIEnv *env,
+    jobject /* this */,
+    jstring filePath) {
+    try {
+        if (g_wrapper == nullptr || !g_wrapper->isInitialized()) {
+            LOGE("Not initialized. Call initialize() first.");
+            return env->NewStringUTF("");
+        }
+
+        const char *filePathStr = env->GetStringUTFChars(filePath, nullptr);
+        if (filePathStr == nullptr) {
+            LOGE("Failed to get filePath string");
+            return env->NewStringUTF("");
+        }
+
+        std::string result = g_wrapper->transcribeFile(std::string(filePathStr));
+        env->ReleaseStringUTFChars(filePath, filePathStr);
+
+        return env->NewStringUTF(result.c_str());
+    } catch (const std::exception &e) {
+        LOGE("Exception in nativeTranscribeFile: %s", e.what());
+        return env->NewStringUTF("");
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_sherpaonnxstt_SherpaOnnxSttModule_nativeRelease(
+    JNIEnv *env,
+    jobject /* this */) {
+    try {
+        if (g_wrapper != nullptr) {
+            g_wrapper->release();
+            LOGI("Native resources released");
+        }
+    } catch (const std::exception &e) {
+        LOGE("Exception in nativeRelease: %s", e.what());
+    }
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_sherpaonnxstt_SherpaOnnxSttModule_nativeTestSherpaInit(
+    JNIEnv *env,
+    jobject /* this */) {
+    LOGI("nativeTestSherpaInit called");
+    return env->NewStringUTF("Sherpa ONNX loaded!");
+}
+
+} // extern "C"
