@@ -2,15 +2,31 @@
 
 Offline Speech-to-Text with sherpa-onnx for React Native
 
-A React Native TurboModule that provides offline speech recognition capabilities using [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). Supports both Zipformer/Transducer and Paraformer model architectures.
+A React Native TurboModule that provides offline speech recognition capabilities using [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). Supports multiple model architectures including Zipformer/Transducer, Paraformer, NeMo CTC, and Whisper.
+
+## Platform Support
+
+| Platform | Status  |
+| -------- | ------- |
+| Android  | ✅ Yes  |
+| iOS      | ❌ Soon |
+
+## Supported Model Types
+
+| Model Type               | `modelType` Value | Description                                                              | Download Links |
+| ------------------------ | ----------------- | ------------------------------------------------------------------------ | -------------- |
+| **Zipformer/Transducer** | `'transducer'`    | Requires `encoder.onnx`, `decoder.onnx`, `joiner.onnx`, and `tokens.txt` | [Download](#)  |
+| **Paraformer**           | `'paraformer'`    | Requires `model.onnx` (or `model.int8.onnx`) and `tokens.txt`            | [Download](#)  |
+| **NeMo CTC**             | `'nemo_ctc'`      | Requires `model.onnx` (or `model.int8.onnx`) and `tokens.txt`            | [Download](#)  |
+| **Whisper**              | `'whisper'`       | Requires `encoder.onnx`, `decoder.onnx`, and `tokens.txt`                | [Download](#)  |
 
 ## Features
 
 - ✅ **Offline Speech Recognition** - No internet connection required
-- ✅ **Multiple Model Types** - Supports Zipformer, Paraformer, and other sherpa-onnx models
+- ✅ **Multiple Model Types** - Supports Zipformer/Transducer, Paraformer, NeMo CTC, and Whisper models
 - ✅ **Model Quantization** - Automatic detection and preference for quantized (int8) models
 - ✅ **Flexible Model Loading** - Asset models, file system models, or auto-detection
-- ✅ **Cross-Platform** - Works on both iOS and Android
+- ✅ **Android Support** - Fully supported on Android
 - ✅ **TypeScript Support** - Full TypeScript definitions included
 
 ## Installation
@@ -19,15 +35,13 @@ A React Native TurboModule that provides offline speech recognition capabilities
 npm install react-native-sherpa-onnx-stt
 ```
 
-### iOS
-
-```sh
-cd ios && pod install
-```
-
 ### Android
 
 No additional setup required. The library automatically handles native dependencies.
+
+### iOS
+
+iOS support is currently not available. This library is Android-only at the moment.
 
 ## Quick Start
 
@@ -106,6 +120,24 @@ await initializeSherpaOnnx({
 });
 ```
 
+### Explicit Model Type
+
+For robustness, you can explicitly specify the model type to avoid auto-detection issues:
+
+```typescript
+// Explicitly specify model type
+await initializeSherpaOnnx({
+  modelPath: 'models/sherpa-onnx-nemo-parakeet-tdt-ctc-en',
+  modelType: 'nemo_ctc', // 'transducer', 'paraformer', 'nemo_ctc', 'whisper', or 'auto' (default)
+});
+
+// Auto-detection (default behavior)
+await initializeSherpaOnnx({
+  modelPath: 'models/my-model',
+  // modelType defaults to 'auto'
+});
+```
+
 ### Cleanup
 
 ```typescript
@@ -119,11 +151,12 @@ await unloadSherpaOnnx();
 
 The library does **not** bundle models. You must provide your own models. See [MODEL_SETUP.md](./MODEL_SETUP.md) for detailed setup instructions.
 
-### Supported Model Types
+### Model File Requirements
 
 - **Zipformer/Transducer**: Requires `encoder.onnx`, `decoder.onnx`, `joiner.onnx`, and `tokens.txt`
-- **Zipformer/Transducer int8**: Requires `encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx`, and `tokens.txt`
 - **Paraformer**: Requires `model.onnx` (or `model.int8.onnx`) and `tokens.txt`
+- **NeMo CTC**: Requires `model.onnx` (or `model.int8.onnx`) and `tokens.txt`
+- **Whisper**: Requires `encoder.onnx`, `decoder.onnx`, and `tokens.txt`
 
 ### Model Files
 
@@ -142,6 +175,7 @@ Initialize the speech recognition engine with a model.
 
 - `options.modelPath`: Model path configuration (see [MODEL_SETUP.md](./MODEL_SETUP.md))
 - `options.preferInt8` (optional): Prefer quantized models (`true`), regular models (`false`), or auto-detect (`undefined`, default)
+- `options.modelType` (optional): Explicit model type (`'transducer'`, `'paraformer'`, `'nemo_ctc'`), or auto-detect (`'auto'`, default)
 
 **Returns:** `Promise<void>`
 
@@ -174,8 +208,8 @@ Resolve a model path configuration to an absolute path.
 ## Requirements
 
 - React Native >= 0.70
-- iOS 13.0+
 - Android API 24+ (Android 7.0+)
+- iOS: Not currently supported
 
 ## Contributing
 

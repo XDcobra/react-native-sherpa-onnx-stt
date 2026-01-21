@@ -55,6 +55,7 @@ export interface InitializeOptions {
    * - 'transducer': Force detection as Zipformer/Transducer model
    * - 'paraformer': Force detection as Paraformer model
    * - 'nemo_ctc': Force detection as NeMo CTC model
+   * - 'whisper': Force detection as Whisper model
    * - 'auto': Automatic detection based on files (default)
    */
   modelType?: ModelType;

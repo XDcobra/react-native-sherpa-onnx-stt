@@ -70,7 +70,9 @@ export default function App() {
           ? 'English (Zipformer)'
           : modelId === MODELS.PARAFORMER_ZH
           ? 'Chinese (Paraformer)'
-          : 'English (NeMo CTC)';
+          : modelId === MODELS.NEMO_CTC_EN
+          ? 'English (NeMo CTC)'
+          : 'English (Whisper)';
 
       setCurrentModel(modelId);
       setInitResult(`Initialized: ${modelName}`);
@@ -200,7 +202,8 @@ export default function App() {
               <Text style={styles.currentModelText}>
                 Current:{' '}
                 {currentModel === MODELS.ZIPFORMER_EN ||
-                currentModel === MODELS.NEMO_CTC_EN
+                currentModel === MODELS.NEMO_CTC_EN ||
+                currentModel === MODELS.WHISPER_EN
                   ? 'English'
                   : 'Chinese'}
               </Text>
@@ -267,6 +270,26 @@ export default function App() {
                 ]}
               >
                 English (NeMo CTC)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modelButton,
+                currentModel === MODELS.WHISPER_EN && styles.modelButtonActive,
+                loading && styles.buttonDisabled,
+              ]}
+              onPress={() => handleInitialize(MODELS.WHISPER_EN)}
+              disabled={loading}
+            >
+              <Text
+                style={[
+                  styles.modelButtonText,
+                  currentModel === MODELS.WHISPER_EN &&
+                    styles.modelButtonTextActive,
+                ]}
+              >
+                English (Whisper)
               </Text>
             </TouchableOpacity>
           </View>

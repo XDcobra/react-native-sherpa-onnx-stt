@@ -92,22 +92,25 @@ bool SherpaOnnxWrapper::initialize(
         // Setup configuration
         sherpa_onnx::cxx::OfflineRecognizerConfig config;
         
+        // Set default feature config (16kHz, 80-dim for most models)
+        config.feat_config.sample_rate = 16000;
+        config.feat_config.feature_dim = 80;
+        
         // Build paths for model files
         std::string encoderPath = modelDir + "/encoder.onnx";
         std::string decoderPath = modelDir + "/decoder.onnx";
         std::string joinerPath = modelDir + "/joiner.onnx";
+        std::string encoderPathInt8 = modelDir + "/encoder.int8.onnx";
+        std::string decoderPathInt8 = modelDir + "/decoder.int8.onnx";
         std::string paraformerPathInt8 = modelDir + "/model.int8.onnx";
         std::string paraformerPath = modelDir + "/model.onnx";
         std::string ctcPathInt8 = modelDir + "/model.int8.onnx";
         std::string ctcPath = modelDir + "/model.onnx";
         std::string tokensPath = modelDir + "/tokens.txt";
 
-        // Check if tokens file exists (required for both model types)
-        if (!fileExists(tokensPath)) {
-            LOGE("Tokens file not found: %s", tokensPath.c_str());
-            return false;
-        }
-        config.model_config.tokens = tokensPath;
+        // Tokens file is required for most models, but Whisper doesn't use it
+        // We'll check for it conditionally based on model type
+        bool tokensRequired = true;
 
         // Configure based on model type
         // Check for Paraformer model based on preferInt8 preference
@@ -169,10 +172,19 @@ bool SherpaOnnxWrapper::initialize(
                              fileExists(decoderPath) && 
                              fileExists(joinerPath);
         
+        // Check for Whisper model (encoder + decoder, but no joiner)
+        // Whisper can have tokens.txt but it's optional
+        bool hasWhisperEncoder = fileExists(encoderPath) || fileExists(encoderPathInt8);
+        bool hasWhisperDecoder = fileExists(decoderPath) || fileExists(decoderPathInt8);
+        bool hasWhisper = hasWhisperEncoder && hasWhisperDecoder && !fileExists(joinerPath);
+        
         // Check if directory name suggests CTC model (contains "nemo", "ctc", "parakeet")
         bool isLikelyCtc = modelDir.find("nemo") != std::string::npos ||
                            modelDir.find("ctc") != std::string::npos ||
                            modelDir.find("parakeet") != std::string::npos;
+        
+        // Check if directory name suggests Whisper model
+        bool isLikelyWhisper = modelDir.find("whisper") != std::string::npos;
         
         bool modelConfigured = false;
         
@@ -193,6 +205,18 @@ bool SherpaOnnxWrapper::initialize(
                 LOGI("Using explicit NeMo CTC model type: %s", ctcModelPath.c_str());
                 config.model_config.nemo_ctc.model = ctcModelPath;
                 modelConfigured = true;
+            } else if (type == "whisper" && hasWhisper) {
+                LOGI("Using explicit Whisper model type");
+                // Whisper uses encoder and decoder, prefer int8 if available
+                std::string whisperEncoder = fileExists(encoderPathInt8) ? encoderPathInt8 : encoderPath;
+                std::string whisperDecoder = fileExists(decoderPathInt8) ? decoderPathInt8 : decoderPath;
+                config.model_config.whisper.encoder = whisperEncoder;
+                config.model_config.whisper.decoder = whisperDecoder;
+                config.model_config.whisper.language = "en"; // Default to English
+                config.model_config.whisper.task = "transcribe"; // Default task
+                // Whisper requires tokens.txt
+                tokensRequired = true;
+                modelConfigured = true;
             } else {
                 LOGE("Explicit model type '%s' specified but required files not found", type.c_str());
                 return false;
@@ -202,12 +226,25 @@ bool SherpaOnnxWrapper::initialize(
         // Auto-detect if no explicit type or auto was specified
         if (!modelConfigured) {
             if (hasTransducer) {
-                // Zipformer/Transducer model
+                // Zipformer/Transducer model (has encoder, decoder, AND joiner)
                 LOGI("Auto-detected Transducer model: encoder=%s, decoder=%s, joiner=%s", 
                      encoderPath.c_str(), decoderPath.c_str(), joinerPath.c_str());
                 config.model_config.transducer.encoder = encoderPath;
                 config.model_config.transducer.decoder = decoderPath;
                 config.model_config.transducer.joiner = joinerPath;
+                modelConfigured = true;
+            } else if (hasWhisper && isLikelyWhisper) {
+                // Whisper model (encoder + decoder, but no joiner, and directory name suggests Whisper)
+                std::string whisperEncoder = fileExists(encoderPathInt8) ? encoderPathInt8 : encoderPath;
+                std::string whisperDecoder = fileExists(decoderPathInt8) ? decoderPathInt8 : decoderPath;
+                LOGI("Auto-detected Whisper model: encoder=%s, decoder=%s", 
+                     whisperEncoder.c_str(), whisperDecoder.c_str());
+                config.model_config.whisper.encoder = whisperEncoder;
+                config.model_config.whisper.decoder = whisperDecoder;
+                config.model_config.whisper.language = "en"; // Default to English
+                config.model_config.whisper.task = "transcribe"; // Default task
+                // Whisper can use tokens.txt if present, but it's optional
+                tokensRequired = fileExists(tokensPath);
                 modelConfigured = true;
             } else if (!ctcModelPath.empty() && isLikelyCtc) {
                 // NeMo CTC model (model.onnx exists and directory name suggests CTC)
@@ -227,6 +264,16 @@ bool SherpaOnnxWrapper::initialize(
             }
         }
         
+        // Set tokens if required
+        if (tokensRequired) {
+            if (!fileExists(tokensPath)) {
+                LOGE("Tokens file not found: %s", tokensPath.c_str());
+                return false;
+            }
+            config.model_config.tokens = tokensPath;
+            LOGI("Using tokens file: %s", tokensPath.c_str());
+        }
+        
         if (!modelConfigured) {
             LOGE("No valid model files found in directory: %s", modelDir.c_str());
             LOGE("Checked paths:");
@@ -235,9 +282,11 @@ bool SherpaOnnxWrapper::initialize(
             LOGE("  CTC (int8): %s (exists: %s)", ctcPathInt8.c_str(), fileExists(ctcPathInt8) ? "yes" : "no");
             LOGE("  CTC: %s (exists: %s)", ctcPath.c_str(), fileExists(ctcPath) ? "yes" : "no");
             LOGE("  Encoder: %s (exists: %s)", encoderPath.c_str(), fileExists(encoderPath) ? "yes" : "no");
+            LOGE("  Encoder (int8): %s (exists: %s)", encoderPathInt8.c_str(), fileExists(encoderPathInt8) ? "yes" : "no");
             LOGE("  Decoder: %s (exists: %s)", decoderPath.c_str(), fileExists(decoderPath) ? "yes" : "no");
+            LOGE("  Decoder (int8): %s (exists: %s)", decoderPathInt8.c_str(), fileExists(decoderPathInt8) ? "yes" : "no");
             LOGE("  Joiner: %s (exists: %s)", joinerPath.c_str(), fileExists(joinerPath) ? "yes" : "no");
-            LOGE("Expected transducer model (encoder.onnx, decoder.onnx, joiner.onnx), paraformer model (model.onnx or model.int8.onnx), or CTC model (model.onnx or model.int8.onnx)");
+            LOGE("Expected transducer model (encoder.onnx, decoder.onnx, joiner.onnx), whisper model (encoder.onnx, decoder.onnx), paraformer model (model.onnx or model.int8.onnx), or CTC model (model.onnx or model.int8.onnx)");
             return false;
         }
 
@@ -247,8 +296,22 @@ bool SherpaOnnxWrapper::initialize(
         config.model_config.provider = "cpu";
 
         // Create recognizer
-        LOGI("Creating OfflineRecognizer with config: tokens=%s, num_threads=%d, provider=%s", 
-             config.model_config.tokens.c_str(), config.model_config.num_threads, config.model_config.provider.c_str());
+        // Log configuration details
+        bool isWhisperModel = !config.model_config.whisper.encoder.empty() && !config.model_config.whisper.decoder.empty();
+        if (isWhisperModel) {
+            std::string tokensInfo = config.model_config.tokens.empty() ? "none" : config.model_config.tokens;
+            LOGI("Creating OfflineRecognizer with Whisper config: encoder=%s, decoder=%s, language=%s, task=%s, tokens=%s, num_threads=%d, provider=%s", 
+                 config.model_config.whisper.encoder.c_str(), 
+                 config.model_config.whisper.decoder.c_str(),
+                 config.model_config.whisper.language.c_str(),
+                 config.model_config.whisper.task.c_str(),
+                 tokensInfo.c_str(),
+                 config.model_config.num_threads, 
+                 config.model_config.provider.c_str());
+        } else {
+            LOGI("Creating OfflineRecognizer with config: tokens=%s, num_threads=%d, provider=%s", 
+                 config.model_config.tokens.c_str(), config.model_config.num_threads, config.model_config.provider.c_str());
+        }
         try {
             auto recognizer = sherpa_onnx::cxx::OfflineRecognizer::Create(config);
             // Check if recognizer is valid by checking internal pointer

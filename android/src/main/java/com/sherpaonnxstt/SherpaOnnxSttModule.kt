@@ -253,7 +253,12 @@ class SherpaOnnxSttModule(reactContext: ReactApplicationContext) :
         return
       }
       
-      val success = nativeInitialize(modelDir, preferInt8 ?: false, preferInt8 != null)
+      val success = nativeInitialize(
+        modelDir,
+        preferInt8 ?: false,
+        preferInt8 != null,
+        modelType ?: "auto"
+      )
       if (success) {
         promise.resolve(null)
       } else {

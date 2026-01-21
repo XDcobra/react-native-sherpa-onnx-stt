@@ -55,6 +55,23 @@ For smaller models that can be bundled with your app:
      └── tokens.txt            (REQUIRED)
    ```
 
+   **For NeMo CTC models:**
+
+   ```
+   android/app/src/main/assets/models/sherpa-onnx-nemo-parakeet-tdt-ctc-en/
+     ├── model.onnx            (or model.int8.onnx for quantized)
+     └── tokens.txt            (REQUIRED)
+   ```
+
+   **For Whisper models:**
+
+   ```
+   android/app/src/main/assets/models/sherpa-onnx-whisper-tiny-en/
+     ├── encoder.onnx          (or encoder.int8.onnx for quantized)
+     ├── decoder.onnx          (or decoder.int8.onnx for quantized)
+     └── tokens.txt            (REQUIRED)
+   ```
+
    **Note:** The library automatically detects and prefers quantized `.int8.onnx` models when available. You can control this behavior with the `preferInt8` option (see Usage section).
 
 2. Model will be available at: `assets/models/sherpa-onnx-zipformer-small-en`
