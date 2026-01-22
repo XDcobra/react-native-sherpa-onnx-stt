@@ -149,7 +149,7 @@ def extractNativeLibs = tasks.register("extractNativeLibs") {
           into extractedLibsDir
         }
         
-        // Debug: List extracted files
+        // Verify extraction succeeded
         def extractedFiles = fileTree(extractedLibsDir).matching { include "**/*.so" }
         if (extractedFiles.isEmpty()) {
           println "WARNING: No .so files extracted from ${aarFile.name}"
@@ -158,10 +158,6 @@ def extractNativeLibs = tasks.register("extractNativeLibs") {
             if (entry.name.contains("jni") || entry.name.endsWith(".so")) {
               println "  ${entry.name}"
             }
-          }
-        } else {
-          extractedFiles.each { file ->
-            println "  Extracted: ${file.absolutePath}"
           }
         }
       }
@@ -173,12 +169,36 @@ def extractNativeLibs = tasks.register("extractNativeLibs") {
   }
 }
 
-// Make CMake depend on extraction - ensure it runs before any CMake task
+// Task to check and log header source before CMake runs
+def checkHeaderSource = tasks.register("checkHeaderSource") {
+  doLast {
+    def cppDir = file("src/main/cpp")
+    def bundledHeaderPath = file("${cppDir}/include/sherpa-onnx/c-api/cxx-api.h")
+    def submoduleHeaderPath = file("${projectDir}/../sherpa-onnx/sherpa-onnx/c-api/cxx-api.h")
+    
+    if (bundledHeaderPath.exists()) {
+      println "Using sherpa-onnx headers from: bundled (npm package)"
+      println "  Path: ${bundledHeaderPath.absolutePath}"
+    } else if (submoduleHeaderPath.exists()) {
+      println "Using sherpa-onnx headers from: git submodule"
+      println "  Path: ${submoduleHeaderPath.absolutePath}"
+    } else {
+      println "WARNING: sherpa-onnx headers not found in bundled or submodule location"
+      println "  Bundled path: ${bundledHeaderPath.absolutePath}"
+      println "  Submodule path: ${submoduleHeaderPath.absolutePath}"
+      println "  Run 'yarn copy-headers' to copy headers to bundled location"
+    }
+  }
+}
+
+// Make CMake depend on extraction and header check - ensure they run before any CMake task
 afterEvaluate {
   tasks.matching { it.name.contains("configureCMake") || it.name.contains("externalNativeBuild") }.configureEach {
     dependsOn extractNativeLibs
+    dependsOn checkHeaderSource
   }
   
-  // Also ensure extraction runs before preBuild
+  // Also ensure extraction and header check run before preBuild
   preBuild.dependsOn extractNativeLibs
+  preBuild.dependsOn checkHeaderSource
 }
