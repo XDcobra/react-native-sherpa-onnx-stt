@@ -153,7 +153,8 @@ jobs:
           # Note: If Pods came from cache, workspace might need to be regenerated
           if [ ! -f "ios/SherpaOnnxSttExample.xcworkspace/contents.xcworkspacedata" ]; then
             echo "Warning: Xcode workspace not found. This may happen if Pods were restored from cache."
-            echo "Attempting to regenerate workspace..."
+            echo "Installing bundle dependencies and regenerating workspace..."
+            bundle install
             bundle exec pod install --project-directory=ios || {
               echo "Error: Failed to regenerate workspace"
               exit 1
