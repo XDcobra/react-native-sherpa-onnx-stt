@@ -24,7 +24,7 @@ jobs:
         run: yarn typecheck
 
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-15  # macOS 15 (Sequoia) has Xcode 16.3 with iOS 18.4 runtime pre-installed
 
     env:
       XCODE_VERSION: 16.3
@@ -155,7 +155,23 @@ jobs:
       - name: Build example for iOS
         run: |
           echo "Building iOS example app..."
-          yarn turbo run build:ios --cache-dir="${{ env.TURBO_CACHE_DIR }}"
+          yarn turbo run build:ios --cache-dir="${{ env.TURBO_CACHE_DIR }}" 2>&1 | tee /tmp/build.log || BUILD_FAILED=1
+          
+          if [ "$BUILD_FAILED" = "1" ]; then
+            echo ""
+            echo "=== Build failed. Checking for linking errors ==="
+            if grep -i "undefined symbols\|symbol.*not found\|ld:.*error.*sherpa" /tmp/build.log; then
+              echo "❌ Linking errors detected with sherpa-onnx!"
+              echo ""
+              echo "Relevant error lines:"
+              grep -i "undefined symbols\|symbol.*not found\|ld:.*error.*sherpa" /tmp/build.log | head -20
+              exit 1
+            else
+              echo "No linking errors found. Showing last 100 lines of build log:"
+              tail -100 /tmp/build.log
+              exit 1
+            fi
+          fi
           
           echo "✓ iOS build completed successfully"
           echo ""
