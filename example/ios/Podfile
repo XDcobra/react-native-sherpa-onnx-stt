@@ -33,247 +33,58 @@ target 'SherpaOnnxSttExample' do
       # :ccache_enabled => true
     )
     
-    # Debug: Find paths for sherpa_onnx XCFramework and SherpaOnnxStt pod
+    # Debug: Print paths for verification
     puts "\n[DEBUG] ========================================"
-    puts "[DEBUG] Searching for sherpa_onnx XCFramework and SherpaOnnxStt pod paths..."
-    STDERR.puts "\n[DEBUG] ========================================"
-    STDERR.puts "[DEBUG] Searching for sherpa_onnx XCFramework and SherpaOnnxStt pod paths..."
+    puts "[DEBUG] Verifying SherpaOnnxStt configuration..."
     
-    # Find SherpaOnnxStt pod installation path
-    sherpa_pod_path = nil
-    pod_spec = installer.pod_targets.find { |t| t.name == 'SherpaOnnxStt' }
-    if pod_spec
-      # Use sandbox to get pod directory
+    # Find SherpaOnnxStt pod
+    sherpa_pod = installer.pod_targets.find { |t| t.name == 'SherpaOnnxStt' }
+    if sherpa_pod
       sherpa_pod_path = installer.sandbox.pod_dir('SherpaOnnxStt').to_s
       puts "[DEBUG] SherpaOnnxStt pod path: #{sherpa_pod_path}"
-      STDERR.puts "[DEBUG] SherpaOnnxStt pod path: #{sherpa_pod_path}"
       
-      # Get PODS_TARGET_SRCROOT relative path
-      pods_root = Pod::Config.instance.installation_root
-      if File.exist?(sherpa_pod_path)
-        relative_path = Pathname.new(sherpa_pod_path).relative_path_from(Pathname.new(pods_root)).to_s
-        puts "[DEBUG] PODS_TARGET_SRCROOT would be: #{relative_path}"
-        STDERR.puts "[DEBUG] PODS_TARGET_SRCROOT would be: #{relative_path}"
-      end
-    else
-      puts "[DEBUG] SherpaOnnxStt pod target not found"
-      STDERR.puts "[DEBUG] SherpaOnnxStt pod target not found"
-    end
-    
-    # Search for XCFramework in various possible locations
-    possible_framework_paths = []
-    
-    # Path 1: Relative to pod root
-    if sherpa_pod_path
-      possible_framework_paths << File.join(sherpa_pod_path, 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
-      possible_framework_paths << File.join(sherpa_pod_path, '..', '..', 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
-    end
-    
-    # Path 2: Relative to Pods root
-    pods_root = Pod::Config.instance.installation_root
-    possible_framework_paths << File.join(pods_root, '..', '..', 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
-    possible_framework_paths << File.join(pods_root, 'SherpaOnnxStt', 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
-    
-    # Path 3: Absolute path from example directory
-    example_root = File.dirname(__dir__)
-    possible_framework_paths << File.join(example_root, '..', 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
-    
-    puts "[DEBUG] Checking possible XCFramework paths:"
-    STDERR.puts "[DEBUG] Checking possible XCFramework paths:"
-    framework_found_path = nil
-    possible_framework_paths.each do |path|
-      expanded_path = File.expand_path(path)
-      exists = File.exist?(expanded_path)
-      status = exists ? "EXISTS" : "NOT FOUND"
-      puts "  [#{status}]: #{expanded_path}"
-      STDERR.puts "  [#{status}]: #{expanded_path}"
-      framework_found_path = expanded_path if exists && framework_found_path.nil?
-    end
-    
-    if framework_found_path
-      puts "[DEBUG] XCFramework found at: #{framework_found_path}"
-      STDERR.puts "[DEBUG] XCFramework found at: #{framework_found_path}"
-    else
-      puts "[DEBUG] XCFramework not found in any checked location"
-      STDERR.puts "[DEBUG] XCFramework not found in any checked location"
-    end
-    
-    puts "[DEBUG] Pods installation root: #{pods_root}"
-    puts "[DEBUG] Example root: #{example_root}"
-    STDERR.puts "[DEBUG] Pods installation root: #{pods_root}"
-    STDERR.puts "[DEBUG] Example root: #{example_root}"
-    puts "[DEBUG] ========================================\n"
-    STDERR.puts "[DEBUG] ========================================\n"
-    
-    # Ensure sherpa_onnx XCFramework is properly linked
-    # This is necessary because static libraries in XCFrameworks may not be auto-linked by CocoaPods
-    installer.pods_project.targets.each do |target|
-      if target.name == 'SherpaOnnxStt'
-        target.build_configurations.each do |config|
-          # Based on debug output:
-          # - PODS_TARGET_SRCROOT is ../.. (relative to Pods root at example/ios)
-          # - Framework is at ios/Frameworks/sherpa_onnx.xcframework relative to root
-          # - So the path should be $(PODS_TARGET_SRCROOT)/ios/Frameworks
-          
-          # Add framework search path
-          framework_search_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
-          framework_search_paths = [framework_search_paths] if framework_search_paths.is_a?(String)
-          framework_search_paths = framework_search_paths.dup
-          framework_search_paths << '"$(PODS_TARGET_SRCROOT)/ios/Frameworks"'
-          config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_search_paths.uniq
-          
-          puts "[DEBUG] Added FRAMEWORK_SEARCH_PATHS: $(PODS_TARGET_SRCROOT)/ios/Frameworks"
-          STDERR.puts "[DEBUG] Added FRAMEWORK_SEARCH_PATHS: $(PODS_TARGET_SRCROOT)/ios/Frameworks"
-          
-          # Force link the static library from XCFramework
-          # For static libraries in XCFrameworks, we need to use -force_load with the .a file
-          # The XCFramework uses:
-          # - ios-arm64 for device builds
-          # - ios-arm64_x86_64-simulator for simulator builds (universal binary)
-          
-          # Handle OTHER_LDFLAGS which can be either a String or an Array
-          other_ldflags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
-          other_ldflags = [other_ldflags] if other_ldflags.is_a?(String)
-          other_ldflags = other_ldflags.dup # Make a copy to avoid modifying the original
-          
-          # Determine the correct path based on SDK
-          sdkroot = config.build_settings['SDKROOT'] || ''
-          if sdkroot.include?('iphonesimulator')
-            # Simulator build - use universal simulator binary
-            framework_lib_path = '$(PODS_TARGET_SRCROOT)/ios/Frameworks/sherpa_onnx.xcframework/ios-arm64_x86_64-simulator/libsherpa-onnx.a'
-          else
-            # Device build
-            framework_lib_path = '$(PODS_TARGET_SRCROOT)/ios/Frameworks/sherpa_onnx.xcframework/ios-arm64/libsherpa-onnx.a'
-          end
-          
-          # Force load the static library
-          other_ldflags << "-force_load \"#{framework_lib_path}\""
-          
-          config.build_settings['OTHER_LDFLAGS'] = other_ldflags.uniq
-          
-          puts "[DEBUG] Added OTHER_LDFLAGS: -force_load"
-          STDERR.puts "[DEBUG] Added OTHER_LDFLAGS: -force_load"
-          puts "[DEBUG] SDKROOT: #{sdkroot}, Force load path: #{framework_lib_path}"
-          STDERR.puts "[DEBUG] SDKROOT: #{sdkroot}, Force load path: #{framework_lib_path}"
-        end
-      end
-    end
-    
-    # Also ensure the framework is linked in the Pods app target
-    # This is necessary because static libraries need to be linked at the app level
-    installer.pods_project.targets.each do |target|
-      if target.name == 'Pods-SherpaOnnxSttExample'
-        target.build_configurations.each do |config|
-          # Add framework search path to app target as well
-          framework_search_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
-          framework_search_paths = [framework_search_paths] if framework_search_paths.is_a?(String)
-          framework_search_paths = framework_search_paths.dup
-          framework_search_paths << '"$(PODS_TARGET_SRCROOT)/../../ios/Frameworks"'
-          config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_search_paths.uniq
-          
-          # Also add force_load for the static library
-          other_ldflags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
-          other_ldflags = [other_ldflags] if other_ldflags.is_a?(String)
-          other_ldflags = other_ldflags.dup
-          
-          # Determine the correct path based on SDK
-          sdkroot = config.build_settings['SDKROOT'] || ''
-          if sdkroot.include?('iphonesimulator')
-            # Simulator build - use universal simulator binary
-            framework_lib_path = '$(PODS_TARGET_SRCROOT)/../../ios/Frameworks/sherpa_onnx.xcframework/ios-arm64_x86_64-simulator/libsherpa-onnx.a'
-          else
-            # Device build
-            framework_lib_path = '$(PODS_TARGET_SRCROOT)/../../ios/Frameworks/sherpa_onnx.xcframework/ios-arm64/libsherpa-onnx.a'
-          end
-          
-          other_ldflags << "-force_load \"#{framework_lib_path}\""
-          config.build_settings['OTHER_LDFLAGS'] = other_ldflags.uniq
-          
-          puts "[DEBUG] Added FRAMEWORK_SEARCH_PATHS and OTHER_LDFLAGS to Pods app target"
-          STDERR.puts "[DEBUG] Added FRAMEWORK_SEARCH_PATHS and OTHER_LDFLAGS to Pods app target"
-          puts "[DEBUG] SDKROOT: #{sdkroot}, Force load path: #{framework_lib_path}"
-          STDERR.puts "[DEBUG] SDKROOT: #{sdkroot}, Force load path: #{framework_lib_path}"
-        end
-      end
-    end
-    
-    # Also modify the actual app target (SherpaOnnxSttExample) in the Xcode project
-    # This is critical because the app target needs to link the framework
-    example_root = File.dirname(__dir__)
-    app_project_path = File.join(example_root, 'SherpaOnnxSttExample.xcodeproj')
-    
-    if File.exist?(app_project_path)
-      begin
-        require 'xcodeproj'
-        app_project = Xcodeproj::Project.open(app_project_path)
-      
-      app_project.targets.each do |target|
-        if target.name == 'SherpaOnnxSttExample'
-          puts "[DEBUG] Modifying app target: #{target.name}"
-          STDERR.puts "[DEBUG] Modifying app target: #{target.name}"
-          
-          target.build_configurations.each do |config|
-            # Add framework search path
-            framework_search_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
-            framework_search_paths = [framework_search_paths] if framework_search_paths.is_a?(String)
-            framework_search_paths = framework_search_paths.dup
-            # Path relative to app project root (example/ios)
-            framework_search_paths << '"$(SRCROOT)/../../ios/Frameworks"'
-            config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_search_paths.uniq
-            
-            puts "[DEBUG] Added FRAMEWORK_SEARCH_PATHS to app target: $(SRCROOT)/../../ios/Frameworks"
-            STDERR.puts "[DEBUG] Added FRAMEWORK_SEARCH_PATHS to app target: $(SRCROOT)/../../ios/Frameworks"
-            
-            # Add linker flags to link the static library
-            # For XCFrameworks with static libraries, we need to explicitly link the .a file
-            # The XCFramework structure uses:
-            # - ios-arm64 for device builds
-            # - ios-arm64_x86_64-simulator for simulator builds (universal binary for both arm64 and x86_64)
-            
-            other_ldflags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
-            other_ldflags = [other_ldflags] if other_ldflags.is_a?(String)
-            other_ldflags = other_ldflags.dup
-            
-            # Determine the correct path based on SDK
-            sdkroot = config.build_settings['SDKROOT'] || ''
-            if sdkroot.include?('iphonesimulator')
-              # Simulator build - use universal simulator binary
-              framework_lib_path = '$(SRCROOT)/../../ios/Frameworks/sherpa_onnx.xcframework/ios-arm64_x86_64-simulator/libsherpa-onnx.a'
+      # Verify XCFramework exists
+      xcframework_path = File.join(sherpa_pod_path, 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
+      if File.exist?(xcframework_path)
+        puts "[DEBUG] XCFramework found at: #{xcframework_path}"
+        
+        # List architecture slices
+        Dir.glob(File.join(xcframework_path, '*')).each do |slice|
+          if File.directory?(slice)
+            lib_file = File.join(slice, 'libsherpa-onnx.a')
+            if File.exist?(lib_file)
+              puts "[DEBUG]   - #{File.basename(slice)}/libsherpa-onnx.a [EXISTS]"
             else
-              # Device build
-              framework_lib_path = '$(SRCROOT)/../../ios/Frameworks/sherpa_onnx.xcframework/ios-arm64/libsherpa-onnx.a'
+              puts "[DEBUG]   - #{File.basename(slice)}/ [NO .a FILE]"
             end
-            
-            # Force load the static library to ensure all symbols are included
-            other_ldflags << "-force_load \"#{framework_lib_path}\""
-            
-            config.build_settings['OTHER_LDFLAGS'] = other_ldflags.uniq
-            
-            puts "[DEBUG] Added OTHER_LDFLAGS to app target: -force_load"
-            STDERR.puts "[DEBUG] Added OTHER_LDFLAGS to app target: -force_load"
-            puts "[DEBUG] SDKROOT: #{sdkroot}, Force load path: #{framework_lib_path}"
-            STDERR.puts "[DEBUG] SDKROOT: #{sdkroot}, Force load path: #{framework_lib_path}"
           end
-          
-          app_project.save
-          puts "[DEBUG] Saved app project"
-          STDERR.puts "[DEBUG] Saved app project"
+        end
+      else
+        puts "[DEBUG] ERROR: XCFramework NOT found at: #{xcframework_path}"
+      end
+      
+      # Print build settings for SherpaOnnxStt target
+      installer.pods_project.targets.each do |target|
+        if target.name == 'SherpaOnnxStt'
+          puts "[DEBUG] Build settings for SherpaOnnxStt target:"
+          target.build_configurations.each do |config|
+            puts "[DEBUG]   Configuration: #{config.name}"
+            
+            lib_dir = config.build_settings['SHERPA_ONNX_LIB_DIR']
+            puts "[DEBUG]     SHERPA_ONNX_LIB_DIR: #{lib_dir || '(not set - will use conditional)'}"
+            
+            lib_search = config.build_settings['LIBRARY_SEARCH_PATHS']
+            puts "[DEBUG]     LIBRARY_SEARCH_PATHS: #{lib_search || '(inherited)'}"
+            
+            ldflags = config.build_settings['OTHER_LDFLAGS']
+            puts "[DEBUG]     OTHER_LDFLAGS: #{ldflags || '(inherited)'}"
+          end
         end
       end
-      rescue LoadError => e
-        puts "[DEBUG] Could not load xcodeproj gem: #{e.message}"
-        STDERR.puts "[DEBUG] Could not load xcodeproj gem: #{e.message}"
-        puts "[DEBUG] Skipping app target modification"
-        STDERR.puts "[DEBUG] Skipping app target modification"
-      rescue => e
-        puts "[DEBUG] Error modifying app target: #{e.message}"
-        STDERR.puts "[DEBUG] Error modifying app target: #{e.message}"
-        puts "[DEBUG] #{e.backtrace.first}"
-        STDERR.puts "[DEBUG] #{e.backtrace.first}"
-      end
     else
-      puts "[DEBUG] App project not found at: #{app_project_path}"
-      STDERR.puts "[DEBUG] App project not found at: #{app_project_path}"
+      puts "[DEBUG] ERROR: SherpaOnnxStt pod target not found!"
     end
+    
+    puts "[DEBUG] ========================================\n"
   end
 end

@@ -1,0 +1,16 @@
+// SherpaOnnxStt build configuration
+// This file handles the conditional linking of sherpa-onnx static library
+// based on the target platform (device vs simulator)
+
+// Define the library directory based on SDK
+// For device builds (iphoneos)
+SHERPA_ONNX_LIB_DIR[sdk=iphoneos*] = $(PODS_TARGET_SRCROOT)/ios/Frameworks/sherpa_onnx.xcframework/ios-arm64
+// For simulator builds (iphonesimulator) 
+SHERPA_ONNX_LIB_DIR[sdk=iphonesimulator*] = $(PODS_TARGET_SRCROOT)/ios/Frameworks/sherpa_onnx.xcframework/ios-arm64_x86_64-simulator
+
+// Add the library search path
+LIBRARY_SEARCH_PATHS = $(inherited) "$(SHERPA_ONNX_LIB_DIR)"
+
+// Force load the static library to ensure all symbols are included
+// This is necessary because the library symbols are called from Objective-C++
+OTHER_LDFLAGS = $(inherited) -force_load "$(SHERPA_ONNX_LIB_DIR)/libsherpa-onnx.a"

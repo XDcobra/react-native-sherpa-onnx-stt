@@ -19,33 +19,14 @@ Pod::Spec.new do |s|
   # Include sherpa-onnx headers
   s.public_header_files = "ios/include/**/*.h"
   
-  # Link with required frameworks
+  # Link with required frameworks and libraries
   s.frameworks = 'Foundation'
   s.libraries = 'c++'
   
-  # sherpa-onnx framework integration
-  # Automatically use pre-built XCFramework if available (bundled in npm package)
+  # sherpa-onnx XCFramework integration
   framework_path = File.join(__dir__, 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
   
-  # Build pod_target_xcconfig hash with framework-specific settings if framework exists
-  pod_target_xcconfig_hash = {
-    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
-    'CLANG_CXX_LIBRARY' => 'libc++',
-    'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/ios/include"'
-  }
-  
-  if File.exist?(framework_path)
-    s.vendored_frameworks = 'ios/Frameworks/sherpa_onnx.xcframework'
-    s.preserve_paths = 'ios/Frameworks/sherpa_onnx.xcframework/**/*'
-    
-    # The XCFramework contains a static library (libsherpa-onnx.a)
-    # CocoaPods sometimes has issues linking static libraries in XCFrameworks
-    # Ensure framework search paths are set correctly
-    pod_target_xcconfig_hash['FRAMEWORK_SEARCH_PATHS'] = '$(inherited) "$(PODS_TARGET_SRCROOT)/ios/Frameworks"'
-    # Note: -framework doesn't work for static libraries in XCFrameworks
-    # We'll use -force_load in post_install hook instead
-  else
-    # If framework is not found, fail fast with a clear error message
+  unless File.exist?(framework_path)
     raise <<~MSG
       SherpaOnnxStt: Required XCFramework 'ios/Frameworks/sherpa_onnx.xcframework' was not found.
 
@@ -55,14 +36,35 @@ Pod::Spec.new do |s|
       You can obtain the framework by:
       1. Downloading from GitHub Actions workflow artifacts
       2. Building it yourself using the build-sherpa-onnx-framework.yml workflow
-
-      If you need to add custom build settings or post_install logic to handle this case,
-      define a `post_install` hook in your consuming app's Podfile instead of the podspec.
     MSG
   end
   
-  # Set pod_target_xcconfig with all accumulated settings
-  s.pod_target_xcconfig = pod_target_xcconfig_hash
+  # Preserve the XCFramework and xcconfig files
+  s.preserve_paths = [
+    'ios/Frameworks/sherpa_onnx.xcframework/**/*',
+    'ios/SherpaOnnxStt.xcconfig'
+  ]
+  
+  # Use xcconfig file for conditional library linking
+  # This handles device vs simulator builds correctly at build time (not pod install time)
+  s.xcconfig = { 'PODS_TARGET_SRCROOT' => '${PODS_TARGET_SRCROOT}' }
+  
+  s.pod_target_xcconfig = {
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
+    'CLANG_CXX_LIBRARY' => 'libc++',
+    'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/ios/include"',
+    # Include our xcconfig file for conditional linker settings
+    # Note: We include the xcconfig content directly since podspec doesn't support #include
+    # Device builds
+    'SHERPA_ONNX_LIB_DIR[sdk=iphoneos*]' => '$(PODS_TARGET_SRCROOT)/ios/Frameworks/sherpa_onnx.xcframework/ios-arm64',
+    # Simulator builds
+    'SHERPA_ONNX_LIB_DIR[sdk=iphonesimulator*]' => '$(PODS_TARGET_SRCROOT)/ios/Frameworks/sherpa_onnx.xcframework/ios-arm64_x86_64-simulator',
+    # Library search path (uses the conditional SHERPA_ONNX_LIB_DIR)
+    'LIBRARY_SEARCH_PATHS' => '$(inherited) "$(SHERPA_ONNX_LIB_DIR)"',
+    # Force load the static library
+    'OTHER_LDFLAGS' => '$(inherited) -force_load "$(SHERPA_ONNX_LIB_DIR)/libsherpa-onnx.a"'
+  }
+  
   s.user_target_xcconfig = {
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
     'CLANG_CXX_LIBRARY' => 'libc++'

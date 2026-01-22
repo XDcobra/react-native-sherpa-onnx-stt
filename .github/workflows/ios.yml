@@ -24,12 +24,10 @@ jobs:
         run: yarn typecheck
 
   build-ios:
-    runs-on: macos-15  # macOS 15 (Sequoia) has Xcode 16.4 with iOS 18.5+ simulator runtimes installed
+    runs-on: macos-15
 
     env:
       XCODE_VERSION: 16.4
-      RCT_USE_RN_DEP: 1
-      RCT_USE_PREBUILT_RNCORE: 1
 
     steps:
       - name: Checkout
@@ -38,44 +36,47 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
-      - name: Verify header files exist
+      - name: Verify required files exist
         run: |
-          echo "Verifying header files exist..."
+          echo "Verifying required files..."
+          
+          # Check header files
           if [ ! -f "ios/include/sherpa-onnx/c-api/c-api.h" ]; then
             echo "Error: iOS header files not found at ios/include/sherpa-onnx/c-api/c-api.h"
-            echo "Header files should be committed to the repository"
             exit 1
           fi
           echo "✓ Header files found"
-
-      - name: Verify XCFramework exists
-        run: |
+          
+          # Check XCFramework
           if [ ! -d "ios/Frameworks/sherpa_onnx.xcframework" ]; then
-            echo "Error: Required XCFramework not found at ios/Frameworks/sherpa_onnx.xcframework"
-            echo ""
-            echo "The XCFramework is required for iOS builds. Please:"
-            echo "1. Run the 'Build sherpa-onnx XCFramework' workflow to build it"
-            echo "2. Ensure the workflow commits the framework to the repository"
-            echo "3. Or download it from workflow artifacts and place it in ios/Frameworks/"
+            echo "Error: XCFramework not found at ios/Frameworks/sherpa_onnx.xcframework"
             exit 1
           fi
-          
           echo "✓ XCFramework found"
-          echo "Framework structure:"
+          
+          # Check xcconfig file
+          if [ ! -f "ios/SherpaOnnxStt.xcconfig" ]; then
+            echo "Error: xcconfig not found at ios/SherpaOnnxStt.xcconfig"
+            exit 1
+          fi
+          echo "✓ xcconfig found"
+          
+          # Verify XCFramework structure
+          echo ""
+          echo "XCFramework structure:"
           ls -la ios/Frameworks/sherpa_onnx.xcframework/
           
-          # Verify it contains required architectures
-          if [ -d "ios/Frameworks/sherpa_onnx.xcframework/ios-arm64" ]; then
-            echo "✓ iOS arm64 architecture found"
-          else
-            echo "Warning: iOS arm64 architecture not found in framework"
-          fi
-          
-          if [ -d "ios/Frameworks/sherpa_onnx.xcframework/ios-arm64_x86_64-simulator" ]; then
-            echo "✓ iOS simulator architecture found"
-          else
-            echo "Warning: iOS simulator architecture not found in framework"
-          fi
+          echo ""
+          echo "Verifying architecture slices:"
+          for arch in ios-arm64 ios-arm64_x86_64-simulator; do
+            lib="ios/Frameworks/sherpa_onnx.xcframework/$arch/libsherpa-onnx.a"
+            if [ -f "$lib" ]; then
+              size=$(ls -lh "$lib" | awk '{print $5}')
+              echo "✓ $arch/libsherpa-onnx.a ($size)"
+            else
+              echo "✗ $arch/libsherpa-onnx.a NOT FOUND"
+            fi
+          done
 
       - name: Use appropriate Xcode version
         uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd # v1.6.0
@@ -86,140 +87,105 @@ jobs:
         run: |
           cd example
           bundle install
-          bundle exec pod repo update
-          bundle exec pod install --project-directory=ios || {
-            echo "Error: Failed to run pod install"
-            exit 1
-          }
+          bundle exec pod install --project-directory=ios
           
-          echo "Verifying pod installation..."
-          # Check if Pods directory exists and contains pods
-          if [ ! -d "ios/Pods" ]; then
-            echo "Error: Pods directory not found"
-            exit 1
-          fi
-          
-          # Check if workspace was created (indicates successful installation)
+          # Verify installation
           if [ ! -f "ios/SherpaOnnxSttExample.xcworkspace/contents.xcworkspacedata" ]; then
-            echo "Error: Xcode workspace not created. Pod installation may have failed."
+            echo "Error: Xcode workspace not created"
             exit 1
           fi
-          
-          # List installed pods to verify SherpaOnnxStt is included
-          echo "Installed pods:"
-          ls -la ios/Pods/ | head -20
           
           echo "✓ CocoaPods dependencies installed"
 
-      - name: Set iOS deployment target to compatible version
+      - name: Verify xcconfig is applied
         run: |
-          cd example/ios
+          echo "Checking if xcconfig settings are in the Pods project..."
           
-          # Use iOS 18.5 as deployment target
-          # Xcode 16.4 supports iOS 18.5 SDK and iOS 18.5 simulator runtime is installed on macos-15
-          # This matches the installed simulator runtime
-          DEPLOYMENT_TARGET="18.5"
-          
-          echo "Setting iOS deployment target to $DEPLOYMENT_TARGET (compatible with Xcode 16.4)"
-          
-          # Set IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj
-          if [ -f "SherpaOnnxSttExample.xcodeproj/project.pbxproj" ]; then
-            # Update deployment target in project file (macOS sed syntax)
-            sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = $DEPLOYMENT_TARGET/g" SherpaOnnxSttExample.xcodeproj/project.pbxproj
-            echo "✓ Updated iOS deployment target to $DEPLOYMENT_TARGET in project.pbxproj"
+          PODS_XCCONFIG="example/ios/Pods/Target Support Files/SherpaOnnxStt/SherpaOnnxStt.debug.xcconfig"
+          if [ -f "$PODS_XCCONFIG" ]; then
+            echo "Contents of SherpaOnnxStt.debug.xcconfig:"
+            cat "$PODS_XCCONFIG"
+            echo ""
+            
+            # Check for our conditional settings
+            if grep -q "SHERPA_ONNX_LIB_DIR" "$PODS_XCCONFIG"; then
+              echo "✓ SHERPA_ONNX_LIB_DIR found in xcconfig"
+            else
+              echo "⚠ SHERPA_ONNX_LIB_DIR not found - checking if conditional settings are supported"
+            fi
+            
+            if grep -q "force_load" "$PODS_XCCONFIG"; then
+              echo "✓ force_load found in xcconfig"
+            else
+              echo "⚠ force_load not found in xcconfig"
+            fi
           else
-            echo "Warning: Could not find project.pbxproj file"
-          fi
-          
-          # Verify the change
-          if [ -f "SherpaOnnxSttExample.xcodeproj/project.pbxproj" ]; then
-            echo "Verification - deployment targets found:"
-            grep "IPHONEOS_DEPLOYMENT_TARGET" SherpaOnnxSttExample.xcodeproj/project.pbxproj | head -5
+            echo "Warning: Could not find xcconfig file at: $PODS_XCCONFIG"
+            echo "Available files in Target Support Files:"
+            ls -la "example/ios/Pods/Target Support Files/" || true
           fi
 
       - name: Build example for iOS
         run: |
-          set -o pipefail  # Ensure pipe failures are detected
-          echo "Building iOS example app..."
+          set -o pipefail
+          echo "Building iOS example app for simulator..."
           
-          # Run build and capture output, preserving exit code
-          if ! yarn turbo run build:ios 2>&1 | tee /tmp/build.log; then
-            BUILD_FAILED=1
-          fi
+          cd example
+          
+          # Build using xcodebuild directly for better control
+          xcodebuild \
+            -workspace ios/SherpaOnnxSttExample.xcworkspace \
+            -scheme SherpaOnnxSttExample \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee /tmp/build.log || BUILD_FAILED=1
           
           if [ "${BUILD_FAILED:-0}" = "1" ]; then
             echo ""
             echo "=== Build failed. Analyzing errors ==="
             
             # Check for linking errors
-            if grep -i "undefined symbols\|symbol.*not found\|ld:.*error.*sherpa" /tmp/build.log; then
-              echo "❌ Linking errors detected with sherpa-onnx!"
+            if grep -i "undefined symbols\|symbol.*not found" /tmp/build.log; then
+              echo "❌ Linking errors detected!"
               echo ""
-              echo "Relevant error lines:"
-              grep -i "undefined symbols\|symbol.*not found\|ld:.*error.*sherpa" /tmp/build.log | head -20
-              exit 1
-            fi
-            
-            # Check for iOS platform errors
-            if grep -i "iOS.*Platform Not Installed\|platform.*not installed" /tmp/build.log; then
-              echo "❌ iOS Platform runtime not installed!"
+              echo "Undefined symbols:"
+              grep -A 5 "Undefined symbols" /tmp/build.log | head -30
+              
               echo ""
-              echo "This usually means the required iOS simulator runtime is missing."
-              echo "Relevant error lines:"
-              grep -i "iOS.*Platform Not Installed\|platform.*not installed" /tmp/build.log | head -10
-              exit 1
+              echo "Checking library search paths used:"
+              grep -i "LIBRARY_SEARCH_PATHS\|SHERPA_ONNX_LIB_DIR" /tmp/build.log | head -10
             fi
             
             # Check for compilation errors
-            if grep -i "^error:" /tmp/build.log; then
-              echo "❌ Compilation errors detected!"
-              echo ""
-              echo "Relevant error lines:"
-              grep -i "^error:" /tmp/build.log | head -30
-              exit 1
+            if grep -i "error:" /tmp/build.log | grep -v "linker command failed"; then
+              echo "❌ Compilation errors:"
+              grep -i "error:" /tmp/build.log | grep -v "linker command failed" | head -20
             fi
             
-            # Check for xcodebuild errors
-            if grep -i "xcodebuild.*error\|error.*xcodebuild" /tmp/build.log; then
-              echo "❌ Xcode build errors detected!"
-              echo ""
-              echo "Relevant error lines:"
-              grep -i "xcodebuild.*error\|error.*xcodebuild" /tmp/build.log | head -20
-            fi
-            
-            # Show all error lines (case-insensitive)
             echo ""
-            echo "All error lines found in build log:"
-            grep -i "error" /tmp/build.log | grep -v "warning" | head -30
-            
-            # Generic build failure - show last 150 lines for more context
-            echo ""
-            echo "❌ Build failed. Showing last 150 lines of build log:"
-            tail -150 /tmp/build.log
+            echo "Last 100 lines of build log:"
+            tail -100 /tmp/build.log
             exit 1
           fi
           
           echo "✓ iOS build completed successfully"
-          echo ""
-          echo "Build verification:"
-          echo "- TurboModule implementation compiled"
-          echo "- XCFramework linked correctly"
-          echo "- Example app built successfully"
 
-      - name: Verify TurboModule linking
+      - name: Verify build artifacts
         run: |
-          echo "Verifying TurboModule is properly linked..."
+          echo "Verifying build artifacts..."
           
-          # Check if the built app contains the native module
           if [ -d "example/ios/build" ]; then
-            echo "✓ Build artifacts found"
+            echo "✓ Build directory exists"
             
-            # Try to find symbols related to the TurboModule
-            if find example/ios/build -name "*.a" -o -name "*.framework" 2>/dev/null | grep -q "SherpaOnnxStt"; then
-              echo "✓ SherpaOnnxStt symbols found in build artifacts"
+            # Check for the app
+            APP_PATH=$(find example/ios/build -name "*.app" -type d | head -1)
+            if [ -n "$APP_PATH" ]; then
+              echo "✓ App bundle found: $APP_PATH"
             else
-              echo "Warning: Could not verify SherpaOnnxStt symbols in build artifacts"
+              echo "Warning: App bundle not found in build directory"
             fi
           else
-            echo "Warning: Build directory not found (may be cleaned up)"
+            echo "Warning: Build directory not found"
           fi
