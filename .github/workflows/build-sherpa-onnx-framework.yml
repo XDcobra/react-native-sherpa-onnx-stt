@@ -1,7 +1,6 @@
 name: Build sherpa-onnx XCFramework
 
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       sherpa_onnx_version:
@@ -38,10 +37,6 @@ jobs:
         run: |
           brew install cmake
 
-      - name: Verify CMake version
-        run: |
-          cmake --version
-
       - name: Clone sherpa-onnx repository
         run: |
           git clone --depth 1 --branch ${{ env.SHERPA_ONNX_VERSION }} https://github.com/k2-fsa/sherpa-onnx.git sherpa-onnx-source || \
@@ -55,30 +50,54 @@ jobs:
           cd sherpa-onnx-source
           chmod +x build-ios.sh
           
+          echo "🔨 Building sherpa-onnx XCFramework (this may take several minutes)..."
+          
           # Accept Xcode license if needed
-          sudo xcodebuild -license accept || true
+          sudo xcodebuild -license accept > /dev/null 2>&1 || true
           
-          # Build the framework
-          ./build-ios.sh
+          # Build the framework with reduced output
+          # Suppress libtool warnings (they're normal and not critical)
+          # Only show progress indicators and errors
+          ./build-ios.sh 2>&1 | grep -E "(Building|Generating|Creating|Error|error|fatal|FAILED|SUCCESS|xcframework|Framework)" || true
           
-          # Verify the framework was built
-          if [ ! -d "build-ios/sherpa_onnx.xcframework" ]; then
+          # Check for both possible framework names (sherpa-onnx.xcframework or sherpa_onnx.xcframework)
+          FRAMEWORK_NAME=""
+          if [ -d "build-ios/sherpa-onnx.xcframework" ]; then
+            FRAMEWORK_NAME="sherpa-onnx.xcframework"
+          elif [ -d "build-ios/sherpa_onnx.xcframework" ]; then
+            FRAMEWORK_NAME="sherpa_onnx.xcframework"
+          else
             echo "Error: XCFramework not found after build"
-            ls -la build-ios/
+            echo "Contents of build-ios/:"
+            ls -la build-ios/ | head -20
             exit 1
           fi
           
-          # Show framework structure
-          echo "XCFramework structure:"
-          find build-ios/sherpa_onnx.xcframework -type f -name "*.framework" -o -name "Info.plist" | head -20
+          echo "✓ XCFramework built successfully: $FRAMEWORK_NAME"
+          echo "Framework size:"
+          du -sh "build-ios/$FRAMEWORK_NAME"
 
       - name: Prepare framework directory
         run: |
           mkdir -p ios/Frameworks
-          cp -R sherpa-onnx-source/build-ios/sherpa_onnx.xcframework ios/Frameworks/
+          
+          # Determine framework name
+          if [ -d "sherpa-onnx-source/build-ios/sherpa-onnx.xcframework" ]; then
+            SOURCE_FRAMEWORK="sherpa-onnx.xcframework"
+            TARGET_FRAMEWORK="sherpa_onnx.xcframework"
+          elif [ -d "sherpa-onnx-source/build-ios/sherpa_onnx.xcframework" ]; then
+            SOURCE_FRAMEWORK="sherpa_onnx.xcframework"
+            TARGET_FRAMEWORK="sherpa_onnx.xcframework"
+          else
+            echo "Error: Framework not found in build directory"
+            exit 1
+          fi
+          
+          # Copy and rename to consistent name (sherpa_onnx.xcframework)
+          cp -R "sherpa-onnx-source/build-ios/$SOURCE_FRAMEWORK" "ios/Frameworks/$TARGET_FRAMEWORK"
           
           # Verify copy
-          if [ ! -d "ios/Frameworks/sherpa_onnx.xcframework" ]; then
+          if [ ! -d "ios/Frameworks/$TARGET_FRAMEWORK" ]; then
             echo "Error: Failed to copy XCFramework"
             exit 1
           fi
