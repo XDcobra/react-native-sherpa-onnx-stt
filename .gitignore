@@ -91,5 +91,6 @@ example/android/app/src/main/assets/models/**/*.int8.onnx
 example/android/app/src/main/assets/models/**/*.txt
 example/android/app/src/main/assets/models/**/vocab.json
 example/android/app/src/main/assets/models/**/merges.txt
+example/android/app/src/main/assets/models/**/tokens.txt
 example/android/app/src/main/assets/models/**/tokenizer.json
 example/android/app/src/main/assets/models/**/Qwen3-*/
