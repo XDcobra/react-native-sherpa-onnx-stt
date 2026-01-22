@@ -177,12 +177,13 @@ jobs:
         run: |
           cd example/ios
           
-          # Use iOS 18.5 as deployment target (actually installed on macos-15 with Xcode 16.3)
-          # According to GitHub Actions runner images, iOS 18.5 simulator runtime is installed
+          # Use iOS 18.0 as deployment target
+          # Xcode 16.3 supports deployment targets from 12.0 to 18.4.99
+          # iOS 18.0 SDK is available with Xcode 16.3 and should work with available runtimes
           # This avoids the "iOS 18.4 Platform Not Installed" error
-          DEPLOYMENT_TARGET="18.5"
+          DEPLOYMENT_TARGET="18.0"
           
-          echo "Setting iOS deployment target to $DEPLOYMENT_TARGET (installed simulator runtime)"
+          echo "Setting iOS deployment target to $DEPLOYMENT_TARGET (compatible with Xcode 16.3)"
           
           # Set IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj
           if [ -f "SherpaOnnxSttExample.xcodeproj/project.pbxproj" ]; then
