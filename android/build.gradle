@@ -22,13 +22,29 @@ apply plugin: "kotlin-android"
 apply plugin: "com.facebook.react"
 
 def getExtOrIntegerDefault(name) {
-  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["SherpaOnnxStt_" + name]).toInteger()
+  if (rootProject.ext.has(name)) {
+    return rootProject.ext.get(name)
+  }
+  if (project.properties["SherpaOnnxStt_" + name] != null) {
+    return project.properties["SherpaOnnxStt_" + name].toInteger()
+  }
+  // Fallback values if not found in rootProject or project properties
+  def fallbackValues = [
+    "compileSdkVersion": 36,
+    "minSdkVersion": 24,
+    "targetSdkVersion": 36
+  ]
+  if (fallbackValues.containsKey(name)) {
+    return fallbackValues[name]
+  }
+  throw new RuntimeException("Property ${name} not found and no fallback value available")
 }
 
 android {
   namespace "com.sherpaonnxstt"
 
-  compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
+  def compileSdk = getExtOrIntegerDefault("compileSdkVersion")
+  compileSdkVersion compileSdk
 
   defaultConfig {
     minSdkVersion getExtOrIntegerDefault("minSdkVersion")
