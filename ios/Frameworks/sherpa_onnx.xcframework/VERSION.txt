@@ -1,0 +1,4 @@
+sherpa-onnx version: v1.12.23
+Built on: 2026-01-22 11:13:03 UTC
+GitHub Actions Run: 21245928240
+Commit: e9c1793e8d0e71e58a406ac7a5f1d7358d427ca2
