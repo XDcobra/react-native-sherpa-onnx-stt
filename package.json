@@ -1,6 +1,6 @@
 {
   "name": "react-native-sherpa-onnx-stt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Offline Speech-to-Text with sherpa-onnx for React Native",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -30,7 +30,9 @@
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
-    "!**/.*"
+    "!**/.*",
+    "!**/sherpa-onnx",
+    "!**/harmony-os"
   ],
   "scripts": {
     "example": "yarn workspace react-native-sherpa-onnx-stt-example",
