@@ -74,7 +74,11 @@ export default function App() {
           ? 'English (NeMo CTC)'
           : modelId === MODELS.WHISPER_EN
           ? 'English (Whisper)'
-          : 'Chinese/English/Cantonese (WeNet CTC)';
+          : modelId === MODELS.WENET_CTC_ZH_EN_CANTONESE
+          ? 'Chinese/English/Cantonese (WeNet CTC)'
+          : modelId === MODELS.SENSE_VOICE_ZH_EN_JA_KO_YUE
+          ? 'Chinese/English/Japanese/Korean/Yue (SenseVoice)'
+          : 'FunASR Nano';
 
       setCurrentModel(modelId);
       setInitResult(`Initialized: ${modelName}`);
@@ -317,6 +321,50 @@ export default function App() {
                 中英粤 (WeNet CTC)
               </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modelButton,
+                currentModel === MODELS.SENSE_VOICE_ZH_EN_JA_KO_YUE &&
+                  styles.modelButtonActive,
+                loading && styles.buttonDisabled,
+              ]}
+              onPress={() =>
+                handleInitialize(MODELS.SENSE_VOICE_ZH_EN_JA_KO_YUE)
+              }
+              disabled={loading}
+            >
+              <Text
+                style={[
+                  styles.modelButtonText,
+                  currentModel === MODELS.SENSE_VOICE_ZH_EN_JA_KO_YUE &&
+                    styles.modelButtonTextActive,
+                ]}
+              >
+                多语言 (SenseVoice)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modelButton,
+                currentModel === MODELS.FUNASR_NANO_INT8 &&
+                  styles.modelButtonActive,
+                loading && styles.buttonDisabled,
+              ]}
+              onPress={() => handleInitialize(MODELS.FUNASR_NANO_INT8)}
+              disabled={loading}
+            >
+              <Text
+                style={[
+                  styles.modelButtonText,
+                  currentModel === MODELS.FUNASR_NANO_INT8 &&
+                    styles.modelButtonTextActive,
+                ]}
+              >
+                FunASR Nano
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {initResult && (
@@ -528,18 +576,23 @@ const styles = StyleSheet.create({
   },
   modelButtons: {
     flexDirection: 'row',
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 8, // Reduced gap to ensure 3 buttons fit per row
     marginTop: 10,
+    justifyContent: 'flex-start',
   },
   modelButton: {
-    flex: 1,
+    width: '29%', // 3 buttons per row: (29% * 3) = 87%, leaving 13% for gaps (2 × 8px ≈ 16px on 400px container)
+    flexGrow: 0,
+    flexShrink: 1,
     backgroundColor: '#f5f5f5',
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 6,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#ddd',
     alignItems: 'center',
+    minWidth: 100, // Minimum width to prevent buttons from being too small
   },
   modelButtonActive: {
     backgroundColor: '#e8f5e9',

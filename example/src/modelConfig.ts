@@ -21,6 +21,8 @@ export const MODELS = {
   NEMO_CTC_EN: 'sherpa-onnx-nemo-parakeet-tdt-ctc-en',
   WHISPER_EN: 'sherpa-onnx-whisper-tiny-en',
   WENET_CTC_ZH_EN_CANTONESE: 'sherpa-onnx-wenetspeech-ctc-zh-en-cantonese',
+  SENSE_VOICE_ZH_EN_JA_KO_YUE: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8',
+  FUNASR_NANO_INT8: 'sherpa-onnx-funasr-nano-int8',
 } as const;
 
 export type ModelId = (typeof MODELS)[keyof typeof MODELS];

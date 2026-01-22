@@ -4,6 +4,8 @@
 #include <sstream>
 #include <optional>
 #include <sys/stat.h>
+#include <algorithm>
+#include <cctype>
 
 // Use filesystem if available (C++17), otherwise fallback
 #if __cplusplus >= 201703L && __has_include(<filesystem>)
@@ -107,6 +109,54 @@ bool SherpaOnnxWrapper::initialize(
         std::string ctcPathInt8 = modelDir + "/model.int8.onnx";
         std::string ctcPath = modelDir + "/model.onnx";
         std::string tokensPath = modelDir + "/tokens.txt";
+        
+        // FunASR Nano paths
+        std::string funasrEncoderAdaptor = modelDir + "/encoder_adaptor.onnx";
+        std::string funasrEncoderAdaptorInt8 = modelDir + "/encoder_adaptor.int8.onnx";
+        std::string funasrLLM = modelDir + "/llm.onnx";
+        std::string funasrLLMInt8 = modelDir + "/llm.int8.onnx";
+        std::string funasrEmbedding = modelDir + "/embedding.onnx";
+        std::string funasrEmbeddingInt8 = modelDir + "/embedding.int8.onnx";
+        
+        // Helper function to find FunASR Nano tokenizer directory
+        // Looks in main directory and subdirectories with "Qwen3" in name
+        auto findFunAsrTokenizer = [&fileExists, &modelDir]() -> std::string {
+            // First check if vocab.json exists directly in model directory
+            std::string vocabInMain = modelDir + "/vocab.json";
+            if (fileExists(vocabInMain)) {
+                return modelDir; // Tokenizer files are in main directory
+            }
+            
+            // Search for subdirectories with "Qwen3" in name
+            try {
+                for (const auto& entry : fs::directory_iterator(modelDir)) {
+                    if (entry.is_directory()) {
+                        std::string dirName = entry.path().filename().string();
+                        // Check if directory name contains "Qwen3" (case-insensitive check)
+                        std::string dirNameLower = dirName;
+                        std::transform(dirNameLower.begin(), dirNameLower.end(), dirNameLower.begin(), ::tolower);
+                        if (dirNameLower.find("qwen3") != std::string::npos) {
+                            std::string vocabPath = entry.path().string() + "/vocab.json";
+                            if (fileExists(vocabPath)) {
+                                return entry.path().string();
+                            }
+                        }
+                    }
+                }
+            } catch (const std::exception& e) {
+                // Error accessing directory - will return empty string
+            }
+            
+            // Fallback: try common name
+            std::string commonPath = modelDir + "/Qwen3-0.6B";
+            if (fileExists(commonPath + "/vocab.json")) {
+                return commonPath;
+            }
+            
+            return ""; // Not found
+        };
+        
+        std::string funasrTokenizer = findFunAsrTokenizer();
 
         // Tokens file is required for most models, but Whisper doesn't use it
         // We'll check for it conditionally based on model type
@@ -178,12 +228,28 @@ bool SherpaOnnxWrapper::initialize(
         bool hasWhisperDecoder = fileExists(decoderPath) || fileExists(decoderPathInt8);
         bool hasWhisper = hasWhisperEncoder && hasWhisperDecoder && !fileExists(joinerPath);
         
+        // Check for FunASR Nano model (encoder_adaptor, llm, embedding, tokenizer directory)
+        // Note: funasrTokenizer is already found by findFunAsrTokenizer() above
+        bool hasFunAsrEncoderAdaptor = fileExists(funasrEncoderAdaptor) || fileExists(funasrEncoderAdaptorInt8);
+        bool hasFunAsrLLM = fileExists(funasrLLM) || fileExists(funasrLLMInt8);
+        bool hasFunAsrEmbedding = fileExists(funasrEmbedding) || fileExists(funasrEmbeddingInt8);
+        bool hasFunAsrTokenizer = !funasrTokenizer.empty() && fileExists(funasrTokenizer + "/vocab.json");
+        bool hasFunAsrNano = hasFunAsrEncoderAdaptor && hasFunAsrLLM && hasFunAsrEmbedding && hasFunAsrTokenizer;
+        
         // Check if directory name suggests NeMo CTC model (contains "nemo", "parakeet")
         bool isLikelyNemoCtc = modelDir.find("nemo") != std::string::npos ||
                                 modelDir.find("parakeet") != std::string::npos;
         
         // Check if directory name suggests WeNet CTC model (contains "wenet")
         bool isLikelyWenetCtc = modelDir.find("wenet") != std::string::npos;
+        
+        // Check if directory name suggests SenseVoice model (contains "sense" or "sensevoice")
+        bool isLikelySenseVoice = modelDir.find("sense") != std::string::npos ||
+                                  modelDir.find("sensevoice") != std::string::npos;
+        
+        // Check if directory name suggests FunASR Nano model (contains "funasr" or "funasr-nano")
+        bool isLikelyFunAsrNano = modelDir.find("funasr") != std::string::npos ||
+                                  modelDir.find("funasr-nano") != std::string::npos;
         
         // Check if directory name suggests Whisper model
         bool isLikelyWhisper = modelDir.find("whisper") != std::string::npos;
@@ -211,6 +277,25 @@ bool SherpaOnnxWrapper::initialize(
                 LOGI("Using explicit WeNet CTC model type: %s", ctcModelPath.c_str());
                 config.model_config.wenet_ctc.model = ctcModelPath;
                 modelConfigured = true;
+            } else if (type == "sense_voice" && !ctcModelPath.empty()) {
+                LOGI("Using explicit SenseVoice model type: %s", ctcModelPath.c_str());
+                config.model_config.sense_voice.model = ctcModelPath;
+                config.model_config.sense_voice.language = "auto"; // Default to auto language detection
+                config.model_config.sense_voice.use_itn = false; // Default to no ITN
+                modelConfigured = true;
+            } else if (type == "funasr_nano" && hasFunAsrNano) {
+                LOGI("Using explicit FunASR Nano model type");
+                // FunASR Nano uses encoder_adaptor, llm, embedding, and tokenizer directory
+                std::string encoderAdaptorPath = fileExists(funasrEncoderAdaptorInt8) ? funasrEncoderAdaptorInt8 : funasrEncoderAdaptor;
+                std::string llmPath = fileExists(funasrLLMInt8) ? funasrLLMInt8 : funasrLLM;
+                std::string embeddingPath = fileExists(funasrEmbeddingInt8) ? funasrEmbeddingInt8 : funasrEmbedding;
+                config.model_config.funasr_nano.encoder_adaptor = encoderAdaptorPath;
+                config.model_config.funasr_nano.llm = llmPath;
+                config.model_config.funasr_nano.embedding = embeddingPath;
+                config.model_config.funasr_nano.tokenizer = funasrTokenizer;
+                // Use default values for prompts and generation parameters
+                tokensRequired = false; // FunASR Nano doesn't use tokens.txt
+                modelConfigured = true;
             } else if (type == "whisper" && hasWhisper) {
                 LOGI("Using explicit Whisper model type");
                 // Whisper uses encoder and decoder, prefer int8 if available
@@ -220,8 +305,15 @@ bool SherpaOnnxWrapper::initialize(
                 config.model_config.whisper.decoder = whisperDecoder;
                 config.model_config.whisper.language = "en"; // Default to English
                 config.model_config.whisper.task = "transcribe"; // Default task
-                // Whisper requires tokens.txt
+                // Whisper requires tokens.txt - set it if it exists
                 tokensRequired = true;
+                if (fileExists(tokensPath)) {
+                    config.model_config.tokens = tokensPath;
+                    LOGI("Using tokens file for Whisper: %s", tokensPath.c_str());
+                } else {
+                    LOGE("Tokens file not found for Whisper model: %s", tokensPath.c_str());
+                    return false;
+                }
                 modelConfigured = true;
             } else {
                 LOGE("Explicit model type '%s' specified but required files not found", type.c_str());
@@ -239,6 +331,19 @@ bool SherpaOnnxWrapper::initialize(
                 config.model_config.transducer.decoder = decoderPath;
                 config.model_config.transducer.joiner = joinerPath;
                 modelConfigured = true;
+            } else if (hasFunAsrNano && isLikelyFunAsrNano) {
+                // FunASR Nano model (has encoder_adaptor, llm, embedding, and tokenizer)
+                std::string encoderAdaptorPath = fileExists(funasrEncoderAdaptorInt8) ? funasrEncoderAdaptorInt8 : funasrEncoderAdaptor;
+                std::string llmPath = fileExists(funasrLLMInt8) ? funasrLLMInt8 : funasrLLM;
+                std::string embeddingPath = fileExists(funasrEmbeddingInt8) ? funasrEmbeddingInt8 : funasrEmbedding;
+                LOGI("Auto-detected FunASR Nano model: encoder_adaptor=%s, llm=%s, embedding=%s, tokenizer=%s", 
+                     encoderAdaptorPath.c_str(), llmPath.c_str(), embeddingPath.c_str(), funasrTokenizer.c_str());
+                config.model_config.funasr_nano.encoder_adaptor = encoderAdaptorPath;
+                config.model_config.funasr_nano.llm = llmPath;
+                config.model_config.funasr_nano.embedding = embeddingPath;
+                config.model_config.funasr_nano.tokenizer = funasrTokenizer;
+                tokensRequired = false; // FunASR Nano doesn't use tokens.txt
+                modelConfigured = true;
             } else if (hasWhisper && isLikelyWhisper) {
                 // Whisper model (encoder + decoder, but no joiner, and directory name suggests Whisper)
                 std::string whisperEncoder = fileExists(encoderPathInt8) ? encoderPathInt8 : encoderPath;
@@ -249,8 +354,22 @@ bool SherpaOnnxWrapper::initialize(
                 config.model_config.whisper.decoder = whisperDecoder;
                 config.model_config.whisper.language = "en"; // Default to English
                 config.model_config.whisper.task = "transcribe"; // Default task
-                // Whisper can use tokens.txt if present, but it's optional
-                tokensRequired = fileExists(tokensPath);
+                // Whisper requires tokens.txt - set it if it exists
+                tokensRequired = true; // Whisper requires tokens.txt
+                if (fileExists(tokensPath)) {
+                    config.model_config.tokens = tokensPath;
+                    LOGI("Using tokens file for Whisper: %s", tokensPath.c_str());
+                } else {
+                    LOGE("Tokens file not found for Whisper model: %s", tokensPath.c_str());
+                    return false;
+                }
+                modelConfigured = true;
+            } else if (!ctcModelPath.empty() && isLikelySenseVoice) {
+                // SenseVoice model (model.onnx exists and directory name suggests SenseVoice)
+                LOGI("Auto-detected SenseVoice model: %s (detected by directory name)", ctcModelPath.c_str());
+                config.model_config.sense_voice.model = ctcModelPath;
+                config.model_config.sense_voice.language = "auto"; // Default to auto language detection
+                config.model_config.sense_voice.use_itn = false; // Default to no ITN
                 modelConfigured = true;
             } else if (!ctcModelPath.empty() && isLikelyWenetCtc) {
                 // WeNet CTC model (model.onnx exists and directory name suggests WeNet)
@@ -309,15 +428,68 @@ bool SherpaOnnxWrapper::initialize(
                     LOGI("Set Paraformer model: %s", paraformerModelPath.c_str());
                 }
                 
+                // Set FunASR Nano files if present (re-check tokenizer in fallback mode)
+                if (hasFunAsrEncoderAdaptor && hasFunAsrLLM && hasFunAsrEmbedding) {
+                    // Try to find tokenizer if not already found
+                    std::string tokenizerPath = funasrTokenizer;
+                    if (tokenizerPath.empty()) {
+                        // Re-run tokenizer search in fallback mode
+                        std::string vocabInMain = modelDir + "/vocab.json";
+                        if (fileExists(vocabInMain)) {
+                            tokenizerPath = modelDir;
+                        } else {
+                            // Search for subdirectories with "Qwen3" in name
+                            try {
+                                for (const auto& entry : fs::directory_iterator(modelDir)) {
+                                    if (entry.is_directory()) {
+                                        std::string dirName = entry.path().filename().string();
+                                        std::string dirNameLower = dirName;
+                                        std::transform(dirNameLower.begin(), dirNameLower.end(), dirNameLower.begin(), ::tolower);
+                                        if (dirNameLower.find("qwen3") != std::string::npos) {
+                                            std::string vocabPath = entry.path().string() + "/vocab.json";
+                                            if (fileExists(vocabPath)) {
+                                                tokenizerPath = entry.path().string();
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (const std::exception& e) {
+                                LOGE("Error searching for FunASR tokenizer in fallback: %s", e.what());
+                            }
+                        }
+                    }
+                    
+                    if (!tokenizerPath.empty() && fileExists(tokenizerPath + "/vocab.json")) {
+                        std::string encoderAdaptorPath = fileExists(funasrEncoderAdaptorInt8) ? funasrEncoderAdaptorInt8 : funasrEncoderAdaptor;
+                        std::string llmPath = fileExists(funasrLLMInt8) ? funasrLLMInt8 : funasrLLM;
+                        std::string embeddingPath = fileExists(funasrEmbeddingInt8) ? funasrEmbeddingInt8 : funasrEmbedding;
+                        config.model_config.funasr_nano.encoder_adaptor = encoderAdaptorPath;
+                        config.model_config.funasr_nano.llm = llmPath;
+                        config.model_config.funasr_nano.embedding = embeddingPath;
+                        config.model_config.funasr_nano.tokenizer = tokenizerPath;
+                        anyFileSet = true;
+                        LOGI("Set FunASR Nano files (fallback): encoder_adaptor=%s, llm=%s, embedding=%s, tokenizer=%s", 
+                             encoderAdaptorPath.c_str(), llmPath.c_str(), embeddingPath.c_str(), tokenizerPath.c_str());
+                    }
+                }
+                
                 // Set CTC models if present (try all CTC types)
                 if (!ctcModelPath.empty()) {
                     // Set all CTC model types - sherpa-onnx will use the correct one based on metadata
                     config.model_config.nemo_ctc.model = ctcModelPath;
                     config.model_config.wenet_ctc.model = ctcModelPath;
+                    // Also set SenseVoice if directory name suggests it
+                    if (isLikelySenseVoice) {
+                        config.model_config.sense_voice.model = ctcModelPath;
+                        config.model_config.sense_voice.language = "auto";
+                        config.model_config.sense_voice.use_itn = false;
+                        LOGI("Set SenseVoice model: %s", ctcModelPath.c_str());
+                    }
                     // Note: We could also set tdnn, zipformer_ctc, telespeech_ctc here
                     // but those are less common, so we'll let sherpa-onnx handle them
                     anyFileSet = true;
-                    LOGI("Set CTC model files: %s (will be detected as NeMo CTC, WeNet CTC, or other CTC type from metadata)", 
+                    LOGI("Set CTC model files: %s (will be detected as NeMo CTC, WeNet CTC, SenseVoice, or other CTC type from metadata)", 
                          ctcModelPath.c_str());
                 }
                 
@@ -354,7 +526,7 @@ bool SherpaOnnxWrapper::initialize(
             LOGE("  Decoder: %s (exists: %s)", decoderPath.c_str(), fileExists(decoderPath) ? "yes" : "no");
             LOGE("  Decoder (int8): %s (exists: %s)", decoderPathInt8.c_str(), fileExists(decoderPathInt8) ? "yes" : "no");
             LOGE("  Joiner: %s (exists: %s)", joinerPath.c_str(), fileExists(joinerPath) ? "yes" : "no");
-            LOGE("Expected transducer model (encoder.onnx, decoder.onnx, joiner.onnx), whisper model (encoder.onnx, decoder.onnx), paraformer model (model.onnx or model.int8.onnx), NeMo CTC model (model.onnx or model.int8.onnx), or WeNet CTC model (model.onnx or model.int8.onnx)");
+            LOGE("Expected transducer model (encoder.onnx, decoder.onnx, joiner.onnx), whisper model (encoder.onnx, decoder.onnx), paraformer model (model.onnx or model.int8.onnx), NeMo CTC model (model.onnx or model.int8.onnx), WeNet CTC model (model.onnx or model.int8.onnx), SenseVoice model (model.onnx or model.int8.onnx), or FunASR Nano model (encoder_adaptor.onnx, llm.onnx, embedding.onnx, tokenizer directory)");
             return false;
         }
 

@@ -37,6 +37,8 @@ export type ModelType =
   | 'nemo_ctc'
   | 'whisper'
   | 'wenet_ctc'
+  | 'sense_voice'
+  | 'funasr_nano'
   | 'auto';
 
 /**
@@ -63,6 +65,8 @@ export interface InitializeOptions {
    * - 'nemo_ctc': Force detection as NeMo CTC model
    * - 'whisper': Force detection as Whisper model
    * - 'wenet_ctc': Force detection as WeNet CTC model
+   * - 'sense_voice': Force detection as SenseVoice model
+   * - 'funasr_nano': Force detection as FunASR Nano model
    * - 'auto': Automatic detection based on files (default)
    */
   modelType?: ModelType;

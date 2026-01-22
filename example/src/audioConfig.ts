@@ -18,6 +18,11 @@ export const TEST_AUDIO_FILES = {
 
   // Mixed language files (for Paraformer model)
   ZH_EN_1: 'test_wavs/2-zh-en.wav',
+
+  // Japanese, Korean, and Yue (Cantonese) test files (for SenseVoice model)
+  JA_1: 'test_wavs/ja.wav',
+  KO_1: 'test_wavs/ko.wav',
+  YUE_1: 'test_wavs/yue.wav',
 } as const;
 
 export type AudioFileId =
@@ -27,7 +32,7 @@ export interface AudioFileInfo {
   id: AudioFileId;
   name: string;
   description: string;
-  language: 'en' | 'zh';
+  language: 'en' | 'zh' | 'ja' | 'ko' | 'yue';
 }
 
 export const AUDIO_FILES: AudioFileInfo[] = [
@@ -73,6 +78,24 @@ export const AUDIO_FILES: AudioFileInfo[] = [
     description: 'Chinese-English mixed audio sample',
     language: 'zh', // Paraformer supports both, so we can categorize it as 'zh'
   },
+  {
+    id: TEST_AUDIO_FILES.JA_1,
+    name: '日本語サンプル',
+    description: 'Japanese audio sample',
+    language: 'ja',
+  },
+  {
+    id: TEST_AUDIO_FILES.KO_1,
+    name: '한국어 샘플',
+    description: 'Korean audio sample',
+    language: 'ko',
+  },
+  {
+    id: TEST_AUDIO_FILES.YUE_1,
+    name: '粵語樣本',
+    description: 'Yue (Cantonese) audio sample',
+    language: 'yue',
+  },
 ];
 
 /**
@@ -81,7 +104,9 @@ export const AUDIO_FILES: AudioFileInfo[] = [
  * - Paraformer: All files (English and Chinese) - supports both languages
  * - NeMo CTC: English files only
  * - Whisper: English files only
- * - WeNet CTC: All files (Chinese, English, Cantonese) - supports multiple languages
+ * - WeNet CTC: All files (Chinese, English, Cantonese/Yue) - supports multiple languages
+ * - SenseVoice: All files (Chinese, English, Japanese, Korean, Yue) - supports multiple languages
+ * - FunASR Nano: All files (multi-language support) - supports multiple languages
  */
 export function getAudioFilesForModel(modelId: string): AudioFileInfo[] {
   const isParaformer = modelId.includes('paraformer');
@@ -89,11 +114,26 @@ export function getAudioFilesForModel(modelId: string): AudioFileInfo[] {
   const isNemoCtc = modelId.includes('nemo') && modelId.includes('ctc');
   const isWenetCtc = modelId.includes('wenet') && modelId.includes('ctc');
   const isWhisper = modelId.includes('whisper');
-  const isEnglish = modelId.includes('en') && !isParaformer && !isWenetCtc;
+  const isSenseVoice =
+    modelId.includes('sense') || modelId.includes('sensevoice');
+  const isFunAsrNano = modelId.includes('funasr') && modelId.includes('nano');
+  const isEnglish =
+    modelId.includes('en') &&
+    !isParaformer &&
+    !isWenetCtc &&
+    !isSenseVoice &&
+    !isFunAsrNano;
 
-  // Paraformer and WeNet CTC support multiple languages
-  if (isParaformer || isWenetCtc) {
+  // SenseVoice supports all languages including Japanese, Korean, and Yue
+  if (isSenseVoice) {
     return AUDIO_FILES;
+  }
+
+  // Paraformer, WeNet CTC, and FunASR Nano support multiple languages (but not ja/ko/yue)
+  if (isParaformer || isWenetCtc || isFunAsrNano) {
+    return AUDIO_FILES.filter(
+      (file) => file.language === 'en' || file.language === 'zh'
+    );
   }
 
   // Zipformer, NeMo CTC, and Whisper support only English
