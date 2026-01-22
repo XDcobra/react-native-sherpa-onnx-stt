@@ -38,17 +38,20 @@ target 'SherpaOnnxSttExample' do
     
     # Find SherpaOnnxStt pod installation path
     sherpa_pod_path = nil
-    installer.pods_project.targets.each do |target|
-      if target.name == 'SherpaOnnxStt'
-        # Get pod installation root
-        pod_root = Pod::Config.instance.installation_root
-        pod_spec = installer.pod_targets.find { |t| t.name == 'SherpaOnnxStt' }
-        if pod_spec
-          sherpa_pod_path = pod_spec.root.to_s
-          Pod::UI.puts "[DEBUG] SherpaOnnxStt pod path: #{sherpa_pod_path}".green
-          Pod::UI.puts "[DEBUG] PODS_TARGET_SRCROOT would be: #{pod_spec.root.relative_path_from(pod_root)}".green
-        end
+    pod_spec = installer.pod_targets.find { |t| t.name == 'SherpaOnnxStt' }
+    if pod_spec
+      # Use sandbox to get pod directory
+      sherpa_pod_path = installer.sandbox.pod_dir('SherpaOnnxStt').to_s
+      Pod::UI.puts "[DEBUG] SherpaOnnxStt pod path: #{sherpa_pod_path}".green
+      
+      # Get PODS_TARGET_SRCROOT relative path
+      pods_root = Pod::Config.instance.installation_root
+      if File.exist?(sherpa_pod_path)
+        relative_path = Pathname.new(sherpa_pod_path).relative_path_from(Pathname.new(pods_root)).to_s
+        Pod::UI.puts "[DEBUG] PODS_TARGET_SRCROOT would be: #{relative_path}".green
       end
+    else
+      Pod::UI.puts "[DEBUG] SherpaOnnxStt pod target not found".red
     end
     
     # Search for XCFramework in various possible locations
