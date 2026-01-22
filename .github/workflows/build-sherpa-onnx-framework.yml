@@ -76,9 +76,78 @@ jobs:
             exit 1
           fi
           
-          echo "✓ XCFramework built successfully: $FRAMEWORK_NAME"
-          echo "Framework size:"
+          echo "XCFramework built: $FRAMEWORK_NAME"
+          echo "Framework size (before adding onnxruntime):"
           du -sh "build-ios/$FRAMEWORK_NAME"
+
+      - name: Add ONNX Runtime to XCFramework
+        run: |
+          cd sherpa-onnx-source/build-ios
+          
+          echo "Adding ONNX Runtime library to sherpa-onnx static library..."
+          
+          # The build script downloads onnxruntime to ios-onnxruntime/
+          ONNXRUNTIME_DIR="ios-onnxruntime/onnxruntime.xcframework"
+          
+          if [ ! -d "$ONNXRUNTIME_DIR" ]; then
+            echo "Error: ONNX Runtime XCFramework not found at $ONNXRUNTIME_DIR"
+            ls -la ios-onnxruntime/ || true
+            exit 1
+          fi
+          
+          echo "Found ONNX Runtime at: $ONNXRUNTIME_DIR"
+          ls -la "$ONNXRUNTIME_DIR"
+          
+          # Determine framework name
+          if [ -d "sherpa-onnx.xcframework" ]; then
+            FRAMEWORK_NAME="sherpa-onnx.xcframework"
+          else
+            FRAMEWORK_NAME="sherpa_onnx.xcframework"
+          fi
+          
+          # For each architecture slice, combine sherpa-onnx.a with onnxruntime.a
+          echo ""
+          echo "=== Combining libraries for ios-arm64 ==="
+          SHERPA_LIB="$FRAMEWORK_NAME/ios-arm64/libsherpa-onnx.a"
+          ONNX_LIB="$ONNXRUNTIME_DIR/ios-arm64/onnxruntime.a"
+          
+          if [ -f "$SHERPA_LIB" ] && [ -f "$ONNX_LIB" ]; then
+            echo "Combining: $SHERPA_LIB + $ONNX_LIB"
+            mv "$SHERPA_LIB" "${SHERPA_LIB}.original"
+            libtool -static -o "$SHERPA_LIB" "${SHERPA_LIB}.original" "$ONNX_LIB"
+            rm "${SHERPA_LIB}.original"
+            echo "Combined library size:"
+            ls -lh "$SHERPA_LIB"
+          else
+            echo "Error: Missing libraries"
+            echo "  SHERPA_LIB exists: $([ -f "$SHERPA_LIB" ] && echo 'yes' || echo 'no')"
+            echo "  ONNX_LIB exists: $([ -f "$ONNX_LIB" ] && echo 'yes' || echo 'no')"
+            exit 1
+          fi
+          
+          echo ""
+          echo "=== Combining libraries for ios-arm64_x86_64-simulator ==="
+          SHERPA_LIB="$FRAMEWORK_NAME/ios-arm64_x86_64-simulator/libsherpa-onnx.a"
+          ONNX_LIB="$ONNXRUNTIME_DIR/ios-arm64_x86_64-simulator/onnxruntime.a"
+          
+          if [ -f "$SHERPA_LIB" ] && [ -f "$ONNX_LIB" ]; then
+            echo "Combining: $SHERPA_LIB + $ONNX_LIB"
+            mv "$SHERPA_LIB" "${SHERPA_LIB}.original"
+            libtool -static -o "$SHERPA_LIB" "${SHERPA_LIB}.original" "$ONNX_LIB"
+            rm "${SHERPA_LIB}.original"
+            echo "Combined library size:"
+            ls -lh "$SHERPA_LIB"
+          else
+            echo "Error: Missing libraries"
+            echo "  SHERPA_LIB exists: $([ -f "$SHERPA_LIB" ] && echo 'yes' || echo 'no')"
+            echo "  ONNX_LIB exists: $([ -f "$ONNX_LIB" ] && echo 'yes' || echo 'no')"
+            exit 1
+          fi
+          
+          echo ""
+          echo "XCFramework updated with ONNX Runtime"
+          echo "Final framework size:"
+          du -sh "$FRAMEWORK_NAME"
 
       - name: Prepare framework directory
         run: |

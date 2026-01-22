@@ -29,7 +29,8 @@ Pod::Spec.new do |s|
   ]
   
   # Link with required frameworks and libraries
-  s.frameworks = 'Foundation', 'Accelerate'
+  # CoreML is required by ONNX Runtime's CoreML execution provider
+  s.frameworks = 'Foundation', 'Accelerate', 'CoreML'
   s.libraries = 'c++'
   
   # Verify XCFramework exists
