@@ -32,5 +32,23 @@ target 'SherpaOnnxSttExample' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+    
+    # Ensure sherpa_onnx XCFramework is properly linked
+    # This is necessary because static libraries in XCFrameworks may not be auto-linked by CocoaPods
+    installer.pods_project.targets.each do |target|
+      if target.name == 'SherpaOnnxStt'
+        target.build_configurations.each do |config|
+          # Add framework search path (relative to Pods project root)
+          framework_search_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
+          framework_search_paths << '"$(PODS_TARGET_SRCROOT)/../../ios/Frameworks"'
+          config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_search_paths.uniq
+          
+          # Force link the framework to ensure all symbols are included
+          other_ldflags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
+          other_ldflags << '-framework sherpa_onnx'
+          config.build_settings['OTHER_LDFLAGS'] = other_ldflags.uniq
+        end
+      end
+    end
   end
 end
