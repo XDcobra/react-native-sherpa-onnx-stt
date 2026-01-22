@@ -190,22 +190,32 @@ target 'SherpaOnnxSttExample' do
             STDERR.puts "[DEBUG] Added FRAMEWORK_SEARCH_PATHS to app target: $(SRCROOT)/../../ios/Frameworks"
             
             # Add linker flags to link the static library
-            other_ldflags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
-            other_ldflags << '-framework sherpa_onnx'
+            # For XCFrameworks with static libraries, we need to explicitly link the .a file
+            # The XCFramework structure uses:
+            # - ios-arm64 for device builds
+            # - ios-arm64_x86_64-simulator for simulator builds (universal binary for both arm64 and x86_64)
             
-            # Force load the static library for the simulator architecture
-            # For x86_64 simulator: ios-arm64_x86_64-simulator
-            # For arm64 simulator: ios-arm64_x86_64-simulator
-            # For device: ios-arm64
-            framework_lib_path = '$(SRCROOT)/../../ios/Frameworks/sherpa_onnx.xcframework/$(PLATFORM_NAME)/libsherpa-onnx.a'
+            other_ldflags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
+            
+            # Determine the correct path based on SDK
+            sdkroot = config.build_settings['SDKROOT'] || ''
+            if sdkroot.include?('iphonesimulator')
+              # Simulator build - use universal simulator binary
+              framework_lib_path = '$(SRCROOT)/../../ios/Frameworks/sherpa_onnx.xcframework/ios-arm64_x86_64-simulator/libsherpa-onnx.a'
+            else
+              # Device build
+              framework_lib_path = '$(SRCROOT)/../../ios/Frameworks/sherpa_onnx.xcframework/ios-arm64/libsherpa-onnx.a'
+            end
+            
+            # Force load the static library to ensure all symbols are included
             other_ldflags << "-force_load \"#{framework_lib_path}\""
             
             config.build_settings['OTHER_LDFLAGS'] = other_ldflags.uniq
             
-            puts "[DEBUG] Added OTHER_LDFLAGS to app target: -framework sherpa_onnx and -force_load"
-            STDERR.puts "[DEBUG] Added OTHER_LDFLAGS to app target: -framework sherpa_onnx and -force_load"
-            puts "[DEBUG] Force load path: #{framework_lib_path}"
-            STDERR.puts "[DEBUG] Force load path: #{framework_lib_path}"
+            puts "[DEBUG] Added OTHER_LDFLAGS to app target: -force_load"
+            STDERR.puts "[DEBUG] Added OTHER_LDFLAGS to app target: -force_load"
+            puts "[DEBUG] SDKROOT: #{sdkroot}, Force load path: #{framework_lib_path}"
+            STDERR.puts "[DEBUG] SDKROOT: #{sdkroot}, Force load path: #{framework_lib_path}"
           end
           
           app_project.save
