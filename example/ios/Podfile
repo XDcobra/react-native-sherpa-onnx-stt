@@ -117,6 +117,8 @@ target 'SherpaOnnxSttExample' do
           
           # Add framework search path
           framework_search_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
+          framework_search_paths = [framework_search_paths] if framework_search_paths.is_a?(String)
+          framework_search_paths = framework_search_paths.dup
           framework_search_paths << '"$(PODS_TARGET_SRCROOT)/ios/Frameworks"'
           config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_search_paths.uniq
           
@@ -129,7 +131,10 @@ target 'SherpaOnnxSttExample' do
           # - ios-arm64 for device builds
           # - ios-arm64_x86_64-simulator for simulator builds (universal binary)
           
+          # Handle OTHER_LDFLAGS which can be either a String or an Array
           other_ldflags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
+          other_ldflags = [other_ldflags] if other_ldflags.is_a?(String)
+          other_ldflags = other_ldflags.dup # Make a copy to avoid modifying the original
           
           # Determine the correct path based on SDK
           sdkroot = config.build_settings['SDKROOT'] || ''
@@ -161,11 +166,15 @@ target 'SherpaOnnxSttExample' do
         target.build_configurations.each do |config|
           # Add framework search path to app target as well
           framework_search_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
+          framework_search_paths = [framework_search_paths] if framework_search_paths.is_a?(String)
+          framework_search_paths = framework_search_paths.dup
           framework_search_paths << '"$(PODS_TARGET_SRCROOT)/../../ios/Frameworks"'
           config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_search_paths.uniq
           
           # Also add force_load for the static library
           other_ldflags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
+          other_ldflags = [other_ldflags] if other_ldflags.is_a?(String)
+          other_ldflags = other_ldflags.dup
           
           # Determine the correct path based on SDK
           sdkroot = config.build_settings['SDKROOT'] || ''
@@ -206,6 +215,8 @@ target 'SherpaOnnxSttExample' do
           target.build_configurations.each do |config|
             # Add framework search path
             framework_search_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
+            framework_search_paths = [framework_search_paths] if framework_search_paths.is_a?(String)
+            framework_search_paths = framework_search_paths.dup
             # Path relative to app project root (example/ios)
             framework_search_paths << '"$(SRCROOT)/../../ios/Frameworks"'
             config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_search_paths.uniq
@@ -220,6 +231,8 @@ target 'SherpaOnnxSttExample' do
             # - ios-arm64_x86_64-simulator for simulator builds (universal binary for both arm64 and x86_64)
             
             other_ldflags = config.build_settings['OTHER_LDFLAGS'] || ['$(inherited)']
+            other_ldflags = [other_ldflags] if other_ldflags.is_a?(String)
+            other_ldflags = other_ldflags.dup
             
             # Determine the correct path based on SDK
             sdkroot = config.build_settings['SDKROOT'] || ''
