@@ -20,6 +20,8 @@ jobs:
   build-framework:
     runs-on: macos-latest
     timeout-minutes: 120
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
