@@ -45,21 +45,21 @@ jobs:
             echo "Error: iOS header files not found at ios/include/sherpa-onnx/c-api/c-api.h"
             exit 1
           fi
-          echo "✓ Header files found"
+          echo "[OK] Header files found"
           
           # Check XCFramework
           if [ ! -d "ios/Frameworks/sherpa_onnx.xcframework" ]; then
             echo "Error: XCFramework not found at ios/Frameworks/sherpa_onnx.xcframework"
             exit 1
           fi
-          echo "✓ XCFramework found"
+          echo "[OK] XCFramework found"
           
           # Check xcconfig file
           if [ ! -f "ios/SherpaOnnxStt.xcconfig" ]; then
             echo "Error: xcconfig not found at ios/SherpaOnnxStt.xcconfig"
             exit 1
           fi
-          echo "✓ xcconfig found"
+          echo "[OK] xcconfig found"
           
           # Verify XCFramework structure
           echo ""
@@ -72,9 +72,9 @@ jobs:
             lib="ios/Frameworks/sherpa_onnx.xcframework/$arch/libsherpa-onnx.a"
             if [ -f "$lib" ]; then
               size=$(ls -lh "$lib" | awk '{print $5}')
-              echo "✓ $arch/libsherpa-onnx.a ($size)"
+              echo "[OK] $arch/libsherpa-onnx.a ($size)"
             else
-              echo "✗ $arch/libsherpa-onnx.a NOT FOUND"
+              echo "[ERROR] $arch/libsherpa-onnx.a NOT FOUND"
             fi
           done
 
@@ -95,7 +95,7 @@ jobs:
             exit 1
           fi
           
-          echo "✓ CocoaPods dependencies installed"
+          echo "[OK] CocoaPods dependencies installed"
 
       - name: Verify xcconfig is applied
         run: |
@@ -109,15 +109,15 @@ jobs:
             
             # Check for our conditional settings
             if grep -q "SHERPA_ONNX_LIB_DIR" "$PODS_XCCONFIG"; then
-              echo "✓ SHERPA_ONNX_LIB_DIR found in xcconfig"
+              echo "[OK] SHERPA_ONNX_LIB_DIR found in xcconfig"
             else
-              echo "⚠ SHERPA_ONNX_LIB_DIR not found - checking if conditional settings are supported"
+              echo "[WARNING] SHERPA_ONNX_LIB_DIR not found - checking if conditional settings are supported"
             fi
             
             if grep -q "force_load" "$PODS_XCCONFIG"; then
-              echo "✓ force_load found in xcconfig"
+              echo "[OK] force_load found in xcconfig"
             else
-              echo "⚠ force_load not found in xcconfig"
+              echo "[WARNING] force_load not found in xcconfig"
             fi
           else
             echo "Warning: Could not find xcconfig file at: $PODS_XCCONFIG"
@@ -132,57 +132,66 @@ jobs:
           
           cd example
           
-          # Build using xcodebuild directly for better control
-          xcodebuild \
+          # Build and save full log to file
+          if ! xcodebuild \
             -workspace ios/SherpaOnnxSttExample.xcworkspace \
             -scheme SherpaOnnxSttExample \
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath ios/build \
             CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee /tmp/build.log || BUILD_FAILED=1
+            > /tmp/build.full.log 2>&1; then
+            BUILD_FAILED=1
+          fi
+          
+          # Display filtered output (errors, warnings, important messages)
+          echo "=== Filtered Build Output ==="
+          grep -E "(: error:|: warning:|BUILD SUCCEEDED|BUILD FAILED|Undefined symbols|fatal error)" /tmp/build.full.log | head -100 || true
           
           if [ "${BUILD_FAILED:-0}" = "1" ]; then
             echo ""
-            echo "=== Build failed. Analyzing errors ==="
+            echo "=== Build failed. Full error analysis ==="
             
-            # Check for linking errors
-            if grep -i "undefined symbols\|symbol.*not found" /tmp/build.log; then
-              echo "❌ Linking errors detected!"
-              echo ""
-              echo "Undefined symbols:"
-              grep -A 5 "Undefined symbols" /tmp/build.log | head -30
-              
-              echo ""
-              echo "Checking library search paths used:"
-              grep -i "LIBRARY_SEARCH_PATHS\|SHERPA_ONNX_LIB_DIR" /tmp/build.log | head -10
-            fi
-            
-            # Check for compilation errors
-            if grep -i "error:" /tmp/build.log | grep -v "linker command failed"; then
-              echo "❌ Compilation errors:"
-              grep -i "error:" /tmp/build.log | grep -v "linker command failed" | head -20
-            fi
-            
+            # Show all lines containing "error:" with context
             echo ""
-            echo "Last 100 lines of build log:"
-            tail -100 /tmp/build.log
+            echo "--- Compilation/Linker Errors ---"
+            grep -B 2 -A 5 ": error:" /tmp/build.full.log | head -100 || echo "No 'error:' lines found"
+            
+            # Show fatal errors
+            echo ""
+            echo "--- Fatal Errors ---"
+            grep -B 2 -A 5 "fatal error" /tmp/build.full.log | head -50 || echo "No fatal errors found"
+            
+            # Check for undefined symbols (linking)
+            echo ""
+            echo "--- Undefined Symbols ---"
+            grep -B 2 -A 10 "Undefined symbols" /tmp/build.full.log | head -50 || echo "No undefined symbols"
+            
+            # Show the CompileC failure details
+            echo ""
+            echo "--- Failed Commands ---"
+            grep -B 5 -A 2 "following build commands failed" /tmp/build.full.log | head -30 || true
+            
+            # Last part of log for context
+            echo ""
+            echo "--- Last 50 lines of build log ---"
+            tail -50 /tmp/build.full.log
             exit 1
           fi
           
-          echo "✓ iOS build completed successfully"
+          echo "[OK] iOS build completed successfully"
 
       - name: Verify build artifacts
         run: |
           echo "Verifying build artifacts..."
           
           if [ -d "example/ios/build" ]; then
-            echo "✓ Build directory exists"
+            echo "[OK] Build directory exists"
             
             # Check for the app
             APP_PATH=$(find example/ios/build -name "*.app" -type d | head -1)
             if [ -n "$APP_PATH" ]; then
-              echo "✓ App bundle found: $APP_PATH"
+              echo "[OK] App bundle found: $APP_PATH"
             else
               echo "Warning: App bundle not found in build directory"
             fi
