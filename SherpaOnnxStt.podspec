@@ -42,9 +42,8 @@ Pod::Spec.new do |s|
     # CocoaPods sometimes has issues linking static libraries in XCFrameworks
     # Ensure framework search paths are set correctly
     pod_target_xcconfig_hash['FRAMEWORK_SEARCH_PATHS'] = '$(inherited) "$(PODS_TARGET_SRCROOT)/ios/Frameworks"'
-    # Force load the static library to ensure all symbols are included
-    # This is necessary because static libraries in XCFrameworks may not be auto-linked
-    pod_target_xcconfig_hash['OTHER_LDFLAGS'] = '$(inherited) -framework sherpa_onnx'
+    # Note: -framework doesn't work for static libraries in XCFrameworks
+    # We'll use -force_load in post_install hook instead
   else
     # If framework is not found, fail fast with a clear error message
     raise <<~MSG
