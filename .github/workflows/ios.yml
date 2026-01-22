@@ -24,7 +24,7 @@ jobs:
         run: yarn typecheck
 
   build-ios:
-    runs-on: macos-15  # macOS 15 (Sequoia) has Xcode 16.3 with iOS 18.4 runtime pre-installed
+    runs-on: macos-15  # macOS 15 (Sequoia) has Xcode 16.3 with iOS 18.5+ simulator runtimes installed
 
     env:
       XCODE_VERSION: 16.3
@@ -108,6 +108,37 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
+      - name: Check available iOS Simulator runtimes
+        id: ios-runtime
+        run: |
+          echo "Checking installed iOS Simulator runtimes..."
+          
+          # List installed runtimes (these are actually available)
+          echo "Installed iOS runtimes:"
+          xcrun simctl list runtimes installed | grep -i "iOS" || echo "No iOS runtimes found via simctl"
+          
+          echo ""
+          echo "Available iOS runtimes (downloadable):"
+          xcrun simctl list runtimes available | grep -i "iOS" || echo "No additional iOS runtimes available"
+          
+          echo ""
+          echo "Checking Xcode SDKs..."
+          xcodebuild -showsdks | grep -i "iphonesimulator" || echo "No iOS Simulator SDKs found"
+          
+          # Find installed iOS runtime version (prefer installed over available)
+          # According to GitHub Actions docs, iOS 18.5 is installed on macos-15
+          INSTALLED_IOS_VERSION=$(xcrun simctl list runtimes installed | grep -i "iOS" | grep -oE "[0-9]+\.[0-9]+" | sort -V | head -1)
+          
+          if [ -z "$INSTALLED_IOS_VERSION" ]; then
+            # Fallback: use iOS 18.5 which is documented as installed on macos-15
+            echo "Could not detect installed runtime, using iOS 18.5 (documented as installed on macos-15)"
+            INSTALLED_IOS_VERSION="18.5"
+          fi
+          
+          echo ""
+          echo "Using iOS version: $INSTALLED_IOS_VERSION (installed simulator runtime)"
+          echo "ios_version=$INSTALLED_IOS_VERSION" >> $GITHUB_OUTPUT
+
       - name: Install CocoaPods dependencies
         if: steps.cocoapods-cache.outputs.cache-hit != 'true'
         run: |
@@ -152,25 +183,69 @@ jobs:
           
           echo "✓ CocoaPods installation verified"
 
+      - name: Set iOS deployment target to compatible version
+        run: |
+          cd example/ios
+          
+          # Use iOS 18.5 as deployment target (actually installed on macos-15 with Xcode 16.3)
+          # According to GitHub Actions runner images, iOS 18.5 simulator runtime is installed
+          # This avoids the "iOS 18.4 Platform Not Installed" error
+          DEPLOYMENT_TARGET="18.5"
+          
+          echo "Setting iOS deployment target to $DEPLOYMENT_TARGET (installed simulator runtime)"
+          
+          # Set IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj
+          if [ -f "SherpaOnnxSttExample.xcodeproj/project.pbxproj" ]; then
+            # Update deployment target in project file (macOS sed syntax)
+            sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = $DEPLOYMENT_TARGET/g" SherpaOnnxSttExample.xcodeproj/project.pbxproj
+            echo "✓ Updated iOS deployment target to $DEPLOYMENT_TARGET in project.pbxproj"
+          else
+            echo "Warning: Could not find project.pbxproj file"
+          fi
+          
+          # Verify the change
+          if [ -f "SherpaOnnxSttExample.xcodeproj/project.pbxproj" ]; then
+            echo "Verification - deployment targets found:"
+            grep "IPHONEOS_DEPLOYMENT_TARGET" SherpaOnnxSttExample.xcodeproj/project.pbxproj | head -5
+          fi
+
       - name: Build example for iOS
         run: |
+          set -o pipefail  # Ensure pipe failures are detected
           echo "Building iOS example app..."
-          yarn turbo run build:ios --cache-dir="${{ env.TURBO_CACHE_DIR }}" 2>&1 | tee /tmp/build.log || BUILD_FAILED=1
           
-          if [ "$BUILD_FAILED" = "1" ]; then
+          # Run build and capture output, preserving exit code
+          if ! yarn turbo run build:ios --cache-dir="${{ env.TURBO_CACHE_DIR }}" 2>&1 | tee /tmp/build.log; then
+            BUILD_FAILED=1
+          fi
+          
+          if [ "${BUILD_FAILED:-0}" = "1" ]; then
             echo ""
-            echo "=== Build failed. Checking for linking errors ==="
+            echo "=== Build failed. Analyzing errors ==="
+            
+            # Check for linking errors
             if grep -i "undefined symbols\|symbol.*not found\|ld:.*error.*sherpa" /tmp/build.log; then
               echo "❌ Linking errors detected with sherpa-onnx!"
               echo ""
               echo "Relevant error lines:"
               grep -i "undefined symbols\|symbol.*not found\|ld:.*error.*sherpa" /tmp/build.log | head -20
               exit 1
-            else
-              echo "No linking errors found. Showing last 100 lines of build log:"
-              tail -100 /tmp/build.log
+            fi
+            
+            # Check for iOS platform errors
+            if grep -i "iOS.*Platform Not Installed\|platform.*not installed" /tmp/build.log; then
+              echo "❌ iOS Platform runtime not installed!"
+              echo ""
+              echo "This usually means the required iOS simulator runtime is missing."
+              echo "Relevant error lines:"
+              grep -i "iOS.*Platform Not Installed\|platform.*not installed" /tmp/build.log | head -10
               exit 1
             fi
+            
+            # Generic build failure - show last 100 lines
+            echo "❌ Build failed with unknown error. Showing last 100 lines of build log:"
+            tail -100 /tmp/build.log
+            exit 1
           fi
           
           echo "✓ iOS build completed successfully"
