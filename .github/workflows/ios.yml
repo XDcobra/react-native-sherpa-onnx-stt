@@ -97,10 +97,19 @@ jobs:
 
       - name: Check turborepo cache for iOS
         run: |
-          TURBO_CACHE_STATUS=$(node -p "($(yarn turbo run build:ios --cache-dir="${{ env.TURBO_CACHE_DIR }}" --dry=json)).tasks.find(t => t.task === 'build:ios').cache.status")
+          # Check cache status by running dry-run and parsing JSON output
+          yarn turbo run build:ios --cache-dir="${{ env.TURBO_CACHE_DIR }}" --dry=json > /tmp/turbo-dry.json || true
           
-          if [[ $TURBO_CACHE_STATUS == "HIT" ]]; then
+          # Extract cache status using node
+          TURBO_CACHE_STATUS=$(node -e "const data = require('/tmp/turbo-dry.json'); const task = data.tasks?.find(t => t.task === 'build:ios'); console.log(task?.cache?.status || 'MISS');")
+          
+          echo "Turborepo cache status: $TURBO_CACHE_STATUS"
+          
+          if [[ "$TURBO_CACHE_STATUS" == "HIT" ]]; then
             echo "turbo_cache_hit=1" >> $GITHUB_ENV
+            echo "✓ Cache hit detected"
+          else
+            echo "Cache miss - will execute build"
           fi
 
       - name: Use appropriate Xcode version
