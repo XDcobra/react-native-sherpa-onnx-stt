@@ -220,6 +220,54 @@ Resolve a model path configuration to an absolute path.
 - Android API 24+ (Android 7.0+)
 - iOS: Not currently supported
 
+## Example Apps
+
+We provide example applications to help you get started with `react-native-sherpa-onnx-stt`:
+
+### Example App (Audio to Text)
+
+The example app included in this repository demonstrates basic audio-to-text transcription capabilities. It includes:
+
+- Multiple model type support (Zipformer, Paraformer, NeMo CTC, Whisper, WeNet CTC, SenseVoice, FunASR Nano)
+- Model selection and configuration
+- Audio file transcription
+- Test audio files for different languages
+
+**Getting started:**
+
+```sh
+cd example
+yarn install
+yarn android  # or yarn ios
+```
+
+<div align="center">
+  <img src="./docs/images/example_home_screen.png" alt="Model selection home screen" width="30%" />
+  <img src="./docs/images/example_english.png" alt="Transcribe english audio" width="30%" />
+  <img src="./docs/images/example_multilanguage.png" alt="Transcribe english and chinese audio" width="30%" />
+</div>
+
+### Video to Text Comparison App
+
+A comprehensive comparison app that demonstrates video-to-text transcription using `react-native-sherpa-onnx-stt` alongside other speech-to-text solutions:
+
+**Repository:** [mobile-videototext-stt-comparison](https://github.com/XDcobra/mobile-videototext-stt-comparison)
+
+**Features:**
+- Video to audio conversion (using native APIs)
+- Audio to text transcription
+- Video to text (video --> WAV --> text)
+- Comparison between different STT providers
+- Performance benchmarking
+
+This app showcases how to integrate `react-native-sherpa-onnx-stt` into a real-world application that processes video files and converts them to text.
+
+<div align="center">
+  <img src="./docs/images/vtt_model_overview.png" alt="Video-to-Text Model Overview" width="30%" />
+  <img src="./docs/images/vtt_result_file_picker.png" alt="Video-to-Text file picker" width="30%" />
+  <img src="./docs/images/vtt_result_test_audio.png" alt="Video-to-Text test audio" width="30%" />
+</div>
+
 ## Contributing
 
 - [Development workflow](CONTRIBUTING.md#development-workflow)
