@@ -1,4 +1,4 @@
-name: CI
+name: IOS Turborepo Build
 on:
   workflow_dispatch:
 
