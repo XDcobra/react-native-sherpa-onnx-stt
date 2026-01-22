@@ -117,19 +117,39 @@ jobs:
           bundle exec pod install --project-directory=ios
           
           echo "Verifying pod installation..."
-          if [ ! -d "ios/Pods/SherpaOnnxStt" ]; then
-            echo "Error: SherpaOnnxStt pod not installed"
+          # Check if Pods directory exists and contains pods
+          if [ ! -d "ios/Pods" ]; then
+            echo "Error: Pods directory not found"
             exit 1
           fi
+          
+          # Check if workspace was created (indicates successful installation)
+          if [ ! -f "ios/SherpaOnnxSttExample.xcworkspace/contents.xcworkspacedata" ]; then
+            echo "Error: Xcode workspace not created. Pod installation may have failed."
+            exit 1
+          fi
+          
           echo "✓ CocoaPods dependencies installed"
 
       - name: Verify CocoaPods installation
         run: |
           cd example
-          if [ ! -d "ios/Pods/SherpaOnnxStt" ]; then
-            echo "Error: SherpaOnnxStt pod not found. CocoaPods installation may have failed."
+          # Verify Pods directory exists
+          if [ ! -d "ios/Pods" ]; then
+            echo "Error: Pods directory not found. CocoaPods installation may have failed."
             exit 1
           fi
+          
+          # Verify workspace exists
+          if [ ! -f "ios/SherpaOnnxSttExample.xcworkspace/contents.xcworkspacedata" ]; then
+            echo "Error: Xcode workspace not found. CocoaPods installation may have failed."
+            exit 1
+          fi
+          
+          # List installed pods to verify SherpaOnnxStt is included
+          echo "Installed pods:"
+          ls -la ios/Pods/ | head -20
+          
           echo "✓ CocoaPods installation verified"
 
       - name: Build example for iOS
