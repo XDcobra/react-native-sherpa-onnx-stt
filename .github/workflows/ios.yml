@@ -143,15 +143,26 @@ jobs:
       - name: Verify CocoaPods installation
         run: |
           cd example
-          # Verify Pods directory exists
+          # Verify Pods directory exists (from cache or installation)
           if [ ! -d "ios/Pods" ]; then
             echo "Error: Pods directory not found. CocoaPods installation may have failed."
             exit 1
           fi
           
           # Verify workspace exists
+          # Note: If Pods came from cache, workspace might need to be regenerated
           if [ ! -f "ios/SherpaOnnxSttExample.xcworkspace/contents.xcworkspacedata" ]; then
-            echo "Error: Xcode workspace not found. CocoaPods installation may have failed."
+            echo "Warning: Xcode workspace not found. This may happen if Pods were restored from cache."
+            echo "Attempting to regenerate workspace..."
+            bundle exec pod install --project-directory=ios || {
+              echo "Error: Failed to regenerate workspace"
+              exit 1
+            }
+          fi
+          
+          # Verify workspace exists after potential regeneration
+          if [ ! -f "ios/SherpaOnnxSttExample.xcworkspace/contents.xcworkspacedata" ]; then
+            echo "Error: Xcode workspace still not found after regeneration."
             exit 1
           fi
           
