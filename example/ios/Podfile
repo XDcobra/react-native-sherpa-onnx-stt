@@ -33,6 +33,62 @@ target 'SherpaOnnxSttExample' do
       # :ccache_enabled => true
     )
     
+    # Debug: Find paths for sherpa_onnx XCFramework and SherpaOnnxStt pod
+    Pod::UI.puts "\n[DEBUG] Searching for sherpa_onnx XCFramework and SherpaOnnxStt pod paths...".yellow
+    
+    # Find SherpaOnnxStt pod installation path
+    sherpa_pod_path = nil
+    installer.pods_project.targets.each do |target|
+      if target.name == 'SherpaOnnxStt'
+        # Get pod installation root
+        pod_root = Pod::Config.instance.installation_root
+        pod_spec = installer.pod_targets.find { |t| t.name == 'SherpaOnnxStt' }
+        if pod_spec
+          sherpa_pod_path = pod_spec.root.to_s
+          Pod::UI.puts "[DEBUG] SherpaOnnxStt pod path: #{sherpa_pod_path}".green
+          Pod::UI.puts "[DEBUG] PODS_TARGET_SRCROOT would be: #{pod_spec.root.relative_path_from(pod_root)}".green
+        end
+      end
+    end
+    
+    # Search for XCFramework in various possible locations
+    possible_framework_paths = []
+    
+    # Path 1: Relative to pod root
+    if sherpa_pod_path
+      possible_framework_paths << File.join(sherpa_pod_path, 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
+      possible_framework_paths << File.join(sherpa_pod_path, '..', '..', 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
+    end
+    
+    # Path 2: Relative to Pods root
+    pods_root = Pod::Config.instance.installation_root
+    possible_framework_paths << File.join(pods_root, '..', '..', 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
+    possible_framework_paths << File.join(pods_root, 'SherpaOnnxStt', 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
+    
+    # Path 3: Absolute path from example directory
+    example_root = File.dirname(__dir__)
+    possible_framework_paths << File.join(example_root, '..', 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
+    
+    Pod::UI.puts "[DEBUG] Checking possible XCFramework paths:".yellow
+    framework_found_path = nil
+    possible_framework_paths.each do |path|
+      expanded_path = File.expand_path(path)
+      exists = File.exist?(expanded_path)
+      status = exists ? "✓ EXISTS" : "✗ NOT FOUND"
+      Pod::UI.puts "  #{status}: #{expanded_path}"
+      framework_found_path = expanded_path if exists && framework_found_path.nil?
+    end
+    
+    if framework_found_path
+      Pod::UI.puts "[DEBUG] ✓ XCFramework found at: #{framework_found_path}".green
+    else
+      Pod::UI.puts "[DEBUG] ✗ XCFramework not found in any checked location".red
+    end
+    
+    Pod::UI.puts "[DEBUG] Pods installation root: #{pods_root}".yellow
+    Pod::UI.puts "[DEBUG] Example root: #{example_root}".yellow
+    Pod::UI.puts ""
+    
     # Ensure sherpa_onnx XCFramework is properly linked
     # This is necessary because static libraries in XCFrameworks may not be auto-linked by CocoaPods
     installer.pods_project.targets.each do |target|
