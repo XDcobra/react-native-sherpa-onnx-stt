@@ -27,7 +27,7 @@ jobs:
     runs-on: macos-15  # macOS 15 (Sequoia) has Xcode 16.3 with iOS 18.5+ simulator runtimes installed
 
     env:
-      XCODE_VERSION: 16.3
+      XCODE_VERSION: 16.4
       TURBO_CACHE_DIR: .turbo/ios
       RCT_USE_RN_DEP: 1
       RCT_USE_PREBUILT_RNCORE: 1
@@ -181,7 +181,7 @@ jobs:
           # Xcode 16.3 supports deployment targets from 12.0 to 18.4.99
           # iOS 18.0 SDK is available with Xcode 16.3 and should work with available runtimes
           # This avoids the "iOS 18.4 Platform Not Installed" error
-          DEPLOYMENT_TARGET="18.0"
+          DEPLOYMENT_TARGET="18.5"
           
           echo "Setting iOS deployment target to $DEPLOYMENT_TARGET (compatible with Xcode 16.3)"
           
