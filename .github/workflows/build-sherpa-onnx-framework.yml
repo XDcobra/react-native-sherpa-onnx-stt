@@ -1,0 +1,167 @@
+name: Build sherpa-onnx XCFramework
+
+on:
+  workflow_dispatch:
+    inputs:
+      sherpa_onnx_version:
+        description: 'sherpa-onnx version/tag to build (e.g., v1.12.23 or main)'
+        required: true
+        default: 'v1.12.23'
+      commit_to_repo:
+        description: 'Commit framework to repo? (default: true)'
+        type: boolean
+        default: true
+
+env:
+  SHERPA_ONNX_VERSION: ${{ github.event.inputs.sherpa_onnx_version || 'v1.12.23' }}
+  XCODE_VERSION: '16.3'
+
+jobs:
+  build-framework:
+    runs-on: macos-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Use appropriate Xcode version
+        uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd # v1.6.0
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Install CMake
+        run: |
+          brew install cmake
+
+      - name: Verify CMake version
+        run: |
+          cmake --version
+
+      - name: Clone sherpa-onnx repository
+        run: |
+          git clone --depth 1 --branch ${{ env.SHERPA_ONNX_VERSION }} https://github.com/k2-fsa/sherpa-onnx.git sherpa-onnx-source || \
+          git clone --depth 1 https://github.com/k2-fsa/sherpa-onnx.git sherpa-onnx-source
+          cd sherpa-onnx-source
+          git checkout ${{ env.SHERPA_ONNX_VERSION }} || git checkout main
+          git log -1 --oneline
+
+      - name: Build sherpa-onnx XCFramework
+        run: |
+          cd sherpa-onnx-source
+          chmod +x build-ios.sh
+          
+          # Accept Xcode license if needed
+          sudo xcodebuild -license accept || true
+          
+          # Build the framework
+          ./build-ios.sh
+          
+          # Verify the framework was built
+          if [ ! -d "build-ios/sherpa_onnx.xcframework" ]; then
+            echo "Error: XCFramework not found after build"
+            ls -la build-ios/
+            exit 1
+          fi
+          
+          # Show framework structure
+          echo "XCFramework structure:"
+          find build-ios/sherpa_onnx.xcframework -type f -name "*.framework" -o -name "Info.plist" | head -20
+
+      - name: Prepare framework directory
+        run: |
+          mkdir -p ios/Frameworks
+          cp -R sherpa-onnx-source/build-ios/sherpa_onnx.xcframework ios/Frameworks/
+          
+          # Verify copy
+          if [ ! -d "ios/Frameworks/sherpa_onnx.xcframework" ]; then
+            echo "Error: Failed to copy XCFramework"
+            exit 1
+          fi
+          
+          # Show size
+          du -sh ios/Frameworks/sherpa_onnx.xcframework
+
+      - name: Create version info file
+        run: |
+          cat > ios/Frameworks/sherpa_onnx.xcframework/VERSION.txt << EOF
+          sherpa-onnx version: ${{ env.SHERPA_ONNX_VERSION }}
+          Built on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          GitHub Actions Run: ${{ github.run_id }}
+          Commit: ${{ github.sha }}
+          EOF
+          cat ios/Frameworks/sherpa_onnx.xcframework/VERSION.txt
+
+      - name: Upload XCFramework as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-xcframework-${{ env.SHERPA_ONNX_VERSION }}
+          path: ios/Frameworks/sherpa_onnx.xcframework
+          retention-days: 90
+          compression-level: 6
+
+      - name: Create framework archive
+        run: |
+          cd ios/Frameworks
+          zip -r sherpa_onnx.xcframework.zip sherpa_onnx.xcframework
+          cd ../..
+          ls -lh ios/Frameworks/sherpa_onnx.xcframework.zip
+
+      - name: Upload framework archive as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-xcframework-zip-${{ env.SHERPA_ONNX_VERSION }}
+          path: ios/Frameworks/sherpa_onnx.xcframework.zip
+          retention-days: 90
+
+      - name: Commit framework to repository
+        if: github.event.inputs.commit_to_repo != 'false'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Remove .gitkeep if framework exists
+          if [ -d "ios/Frameworks/sherpa_onnx.xcframework" ]; then
+            rm -f ios/Frameworks/.gitkeep
+          fi
+          
+          # Check if there are changes
+          if git diff --quiet ios/Frameworks/ 2>/dev/null && [ -z "$(git ls-files --others --exclude-standard ios/Frameworks/)" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git add ios/Frameworks/sherpa_onnx.xcframework
+          git add ios/Frameworks/sherpa_onnx.xcframework.zip || true
+          git add ios/Frameworks/.gitkeep || true
+          
+          # Check if there are staged changes
+          if git diff --cached --quiet; then
+            echo "No staged changes to commit"
+            exit 0
+          fi
+          
+          git commit -m "chore: Update sherpa-onnx XCFramework to ${{ env.SHERPA_ONNX_VERSION }} [skip ci]"
+          
+          # Push to current branch
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Summary
+        run: |
+          echo "## ✅ sherpa-onnx XCFramework Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ env.SHERPA_ONNX_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Framework Location:** \`ios/Frameworks/sherpa_onnx.xcframework\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifacts:** Available for download in the Actions tab" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the artifact from this workflow run" >> $GITHUB_STEP_SUMMARY
+          echo "2. Extract it to \`ios/Frameworks/\` in your project" >> $GITHUB_STEP_SUMMARY
+          echo "3. Update \`SherpaOnnxStt.podspec\` to use the framework:" >> $GITHUB_STEP_SUMMARY
+          echo "   \`\`\`ruby" >> $GITHUB_STEP_SUMMARY
+          echo "   s.vendored_frameworks = 'ios/Frameworks/sherpa_onnx.xcframework'" >> $GITHUB_STEP_SUMMARY
+          echo "   s.preserve_paths = 'ios/Frameworks/sherpa_onnx.xcframework/**/*'" >> $GITHUB_STEP_SUMMARY
+          echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY

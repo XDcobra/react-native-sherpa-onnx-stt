@@ -13,7 +13,7 @@ A React Native TurboModule that provides offline speech recognition capabilities
 | Platform | Status  |
 | -------- | ------- |
 | Android  | ✅ Yes  |
-| iOS      | ❌ Soon |
+| iOS      | ✅ Yes  |
 
 ## Supported Model Types
 
@@ -34,6 +34,7 @@ A React Native TurboModule that provides offline speech recognition capabilities
 - ✅ **Model Quantization** - Automatic detection and preference for quantized (int8) models
 - ✅ **Flexible Model Loading** - Asset models, file system models, or auto-detection
 - ✅ **Android Support** - Fully supported on Android
+- ✅ **iOS Support** - Fully supported on iOS (requires sherpa-onnx XCFramework)
 - ✅ **TypeScript Support** - Full TypeScript definitions included
 
 ## Installation
@@ -44,11 +45,41 @@ npm install react-native-sherpa-onnx-stt
 
 ### Android
 
-No additional setup required. The library automatically handles native dependencies.
+No additional setup required. The library automatically handles native dependencies via Gradle.
 
 ### iOS
 
-iOS support is currently not available. This library is Android-only at the moment.
+**No additional setup required!** The sherpa-onnx XCFramework is automatically included in the npm package. Simply install CocoaPods dependencies:
+
+```sh
+cd ios
+pod install
+```
+
+The framework will be automatically detected and linked by the Podspec.
+
+#### Manual Setup (Optional)
+
+If you need to use a different version of sherpa-onnx or build it yourself:
+
+1. **Download from GitHub Actions** (if available):
+   - Go to the [Actions tab](https://github.com/XDcobra/react-native-sherpa-onnx-stt/actions)
+   - Find the latest "Build sherpa-onnx XCFramework" workflow run
+   - Download the `sherpa-onnx-xcframework-zip-*` artifact
+   - Extract to `ios/Frameworks/` in your project
+
+2. **Build locally** (requires macOS):
+   ```sh
+   git clone https://github.com/k2-fsa/sherpa-onnx.git
+   cd sherpa-onnx
+   git checkout v1.12.23
+   ./build-ios.sh
+   cp -r build-ios/sherpa_onnx.xcframework /path/to/your/project/ios/Frameworks/
+   ```
+
+The Podspec will automatically detect and use the framework if it exists in `ios/Frameworks/`.
+
+**Note:** The iOS implementation uses the same C++ wrapper as Android, ensuring consistent behavior across platforms.
 
 ## Quick Start
 
@@ -218,7 +249,7 @@ Resolve a model path configuration to an absolute path.
 
 - React Native >= 0.70
 - Android API 24+ (Android 7.0+)
-- iOS: Not currently supported
+- iOS 13.0+ (requires sherpa-onnx XCFramework - see iOS Setup below)
 
 ## Example Apps
 
