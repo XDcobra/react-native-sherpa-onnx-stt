@@ -29,7 +29,7 @@ Pod::Spec.new do |s|
   ]
   
   # Link with required frameworks and libraries
-  s.frameworks = 'Foundation'
+  s.frameworks = 'Foundation', 'Accelerate'
   s.libraries = 'c++'
   
   # Verify XCFramework exists
@@ -51,32 +51,40 @@ Pod::Spec.new do |s|
   puts "[SherpaOnnxStt] Include path: #{ios_include_path}"
   puts "[SherpaOnnxStt] Framework path: #{framework_path}"
   
-  # Preserve the XCFramework, xcconfig files, and headers
+  # Preserve XCFramework and headers
   s.preserve_paths = [
-    'ios/Frameworks/sherpa_onnx.xcframework/**/*',
+    'ios/Frameworks/sherpa_onnx.xcframework',
     'ios/SherpaOnnxStt.xcconfig',
     'ios/include/**/*'
   ]
+  
+  # Static library linkage settings
+  # Compute library paths for device and simulator at pod install time
+  device_lib_path = File.join(framework_path, 'ios-arm64', 'libsherpa-onnx.a')
+  simulator_lib_path = File.join(framework_path, 'ios-arm64_x86_64-simulator', 'libsherpa-onnx.a')
   
   s.pod_target_xcconfig = {
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
     'CLANG_CXX_LIBRARY' => 'libc++',
     # Header search paths - use absolute path computed at pod install time
     'HEADER_SEARCH_PATHS' => "$(inherited) \"#{ios_include_path}\"",
-    # Device builds - use absolute paths
-    'SHERPA_ONNX_LIB_DIR[sdk=iphoneos*]' => "#{framework_path}/ios-arm64",
-    # Simulator builds
-    'SHERPA_ONNX_LIB_DIR[sdk=iphonesimulator*]' => "#{framework_path}/ios-arm64_x86_64-simulator",
-    # Library search path (uses the conditional SHERPA_ONNX_LIB_DIR)
-    'LIBRARY_SEARCH_PATHS' => '$(inherited) "$(SHERPA_ONNX_LIB_DIR)"',
-    # Force load the static library
-    'OTHER_LDFLAGS' => '$(inherited) -force_load "$(SHERPA_ONNX_LIB_DIR)/libsherpa-onnx.a"'
+    # Library search paths for the pod itself
+    'LIBRARY_SEARCH_PATHS[sdk=iphoneos*]' => "$(inherited) \"#{File.join(framework_path, 'ios-arm64')}\"",
+    'LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]' => "$(inherited) \"#{File.join(framework_path, 'ios-arm64_x86_64-simulator')}\""
   }
   
+  # Settings that propagate to the app target for final linking
   s.user_target_xcconfig = {
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
-    'CLANG_CXX_LIBRARY' => 'libc++'
+    'CLANG_CXX_LIBRARY' => 'libc++',
+    # Library search paths for the app
+    'LIBRARY_SEARCH_PATHS[sdk=iphoneos*]' => "$(inherited) \"#{File.join(framework_path, 'ios-arm64')}\"",
+    'LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]' => "$(inherited) \"#{File.join(framework_path, 'ios-arm64_x86_64-simulator')}\"",
+    # Force load the static library to ensure all symbols are included
+    'OTHER_LDFLAGS[sdk=iphoneos*]' => "$(inherited) -force_load \"#{device_lib_path}\"",
+    'OTHER_LDFLAGS[sdk=iphonesimulator*]' => "$(inherited) -force_load \"#{simulator_lib_path}\""
   }
+  
 
   install_modules_dependencies(s)
 end

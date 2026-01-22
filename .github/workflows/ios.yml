@@ -99,66 +99,57 @@ jobs:
 
       - name: Verify xcconfig is applied
         run: |
-          echo "Checking if xcconfig settings are in the Pods project..."
-          
+          echo "=== Checking Pod Target xcconfig ==="
           PODS_XCCONFIG="example/ios/Pods/Target Support Files/SherpaOnnxStt/SherpaOnnxStt.debug.xcconfig"
           if [ -f "$PODS_XCCONFIG" ]; then
-            echo "=== Contents of SherpaOnnxStt.debug.xcconfig ==="
-            cat "$PODS_XCCONFIG"
-            echo ""
-            echo "=== End of xcconfig ==="
-            echo ""
+            echo "Pod xcconfig found. Checking key settings..."
             
-            # Check for HEADER_SEARCH_PATHS
             if grep -q "HEADER_SEARCH_PATHS" "$PODS_XCCONFIG"; then
-              echo "[OK] HEADER_SEARCH_PATHS found in xcconfig"
-              grep "HEADER_SEARCH_PATHS" "$PODS_XCCONFIG"
-            else
-              echo "[ERROR] HEADER_SEARCH_PATHS not found in xcconfig!"
+              echo "[OK] HEADER_SEARCH_PATHS found"
             fi
             
-            # Check for our conditional settings
-            if grep -q "SHERPA_ONNX_LIB_DIR" "$PODS_XCCONFIG"; then
-              echo "[OK] SHERPA_ONNX_LIB_DIR found in xcconfig"
+            if grep -q "LIBRARY_SEARCH_PATHS" "$PODS_XCCONFIG"; then
+              echo "[OK] LIBRARY_SEARCH_PATHS found in pod xcconfig"
+              grep "LIBRARY_SEARCH_PATHS" "$PODS_XCCONFIG"
             else
-              echo "[WARNING] SHERPA_ONNX_LIB_DIR not found"
+              echo "[WARNING] LIBRARY_SEARCH_PATHS not found in pod xcconfig"
             fi
-            
-            if grep -q "force_load" "$PODS_XCCONFIG"; then
-              echo "[OK] force_load found in xcconfig"
-            else
-              echo "[WARNING] force_load not found in xcconfig"
-            fi
-          else
-            echo "Error: Could not find xcconfig file at: $PODS_XCCONFIG"
-            echo "Available files in Target Support Files:"
-            ls -la "example/ios/Pods/Target Support Files/" || true
           fi
           
           echo ""
-          echo "=== Checking PODS_TARGET_SRCROOT resolution ==="
-          # Find the PODS_TARGET_SRCROOT in Pods.xcodeproj
-          PODS_PROJECT="example/ios/Pods/Pods.xcodeproj/project.pbxproj"
-          if [ -f "$PODS_PROJECT" ]; then
-            echo "Looking for SherpaOnnxStt PODS_TARGET_SRCROOT in Pods project..."
-            grep -A 2 "PODS_TARGET_SRCROOT.*SherpaOnnxStt" "$PODS_PROJECT" | head -10 || echo "Not found directly"
-            grep "SherpaOnnxStt" "$PODS_PROJECT" | grep -i "srcroot\|path" | head -5 || true
+          echo "=== Checking App Target xcconfig (user_target_xcconfig) ==="
+          # The aggregated settings for the app are in Pods-SherpaOnnxSttExample
+          APP_XCCONFIG="example/ios/Pods/Target Support Files/Pods-SherpaOnnxSttExample/Pods-SherpaOnnxSttExample.debug.xcconfig"
+          if [ -f "$APP_XCCONFIG" ]; then
+            echo "App xcconfig found at: $APP_XCCONFIG"
+            echo ""
+            echo "Relevant linker settings:"
+            grep -E "(OTHER_LDFLAGS|LIBRARY_SEARCH_PATHS|force_load)" "$APP_XCCONFIG" || echo "No linker settings found"
+            echo ""
+            
+            if grep -q "force_load" "$APP_XCCONFIG"; then
+              echo "[OK] force_load found in app xcconfig"
+            else
+              echo "[ERROR] force_load NOT found in app xcconfig - linking will fail!"
+            fi
+            
+            if grep -q "libsherpa-onnx.a" "$APP_XCCONFIG"; then
+              echo "[OK] libsherpa-onnx.a referenced in app xcconfig"
+            else
+              echo "[WARNING] libsherpa-onnx.a not directly referenced"
+            fi
+          else
+            echo "Warning: App xcconfig not found at expected path"
+            echo "Available xcconfig files:"
+            find example/ios/Pods -name "*.xcconfig" -type f | head -20
           fi
           
           echo ""
           echo "=== Verifying header file locations ==="
-          echo "Headers should be at: ios/include/sherpa-onnx/c-api/"
-          ls -la ios/include/sherpa-onnx/c-api/ || echo "Directory not found!"
-          
-          echo ""
-          echo "Full header path for compiler:"
-          FULL_PATH=$(pwd)/ios/include
-          echo "Expected HEADER_SEARCH_PATHS base: $FULL_PATH"
-          echo "Looking for: sherpa-onnx/c-api/cxx-api.h"
-          if [ -f "$FULL_PATH/sherpa-onnx/c-api/cxx-api.h" ]; then
-            echo "[OK] Header file exists at: $FULL_PATH/sherpa-onnx/c-api/cxx-api.h"
+          if [ -f "ios/include/sherpa-onnx/c-api/cxx-api.h" ]; then
+            echo "[OK] Header files exist"
           else
-            echo "[ERROR] Header file NOT found at: $FULL_PATH/sherpa-onnx/c-api/cxx-api.h"
+            echo "[ERROR] Header files missing!"
           fi
 
       - name: Build example for iOS
