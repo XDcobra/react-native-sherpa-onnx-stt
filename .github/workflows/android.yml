@@ -1,6 +1,14 @@
 name: Build Android example app
 on:
+  pull_request:
+    branches:
+      - main
   push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
