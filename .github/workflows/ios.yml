@@ -293,21 +293,27 @@ jobs:
           echo "=== Checking Xcode resolved build settings for OTHER_LDFLAGS ==="
           cd example
           
+          # List available simulators first
+          echo "Available simulators:"
+          xcrun simctl list devices available | grep -E "iPhone|iPad" | head -10 || true
+          
           # Show the resolved OTHER_LDFLAGS for the app target on simulator
+          # Use generic destination to avoid simulator availability issues
+          echo ""
           echo "Resolved OTHER_LDFLAGS for Debug-iphonesimulator:"
           xcodebuild -workspace ios/SherpaOnnxSttExample.xcworkspace \
             -scheme SherpaOnnxSttExample \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
-            -showBuildSettings 2>/dev/null | grep -A2 "OTHER_LDFLAGS" | head -20 || true
+            -sdk iphonesimulator \
+            -showBuildSettings 2>&1 | grep -A2 "OTHER_LDFLAGS" | head -20 || echo "Could not get build settings"
           
           echo ""
           echo "Checking if force_load appears in resolved settings:"
           SETTINGS=$(xcodebuild -workspace ios/SherpaOnnxSttExample.xcworkspace \
             -scheme SherpaOnnxSttExample \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
-            -showBuildSettings 2>/dev/null)
+            -sdk iphonesimulator \
+            -showBuildSettings 2>&1) || true
           
           if echo "$SETTINGS" | grep -q "force_load"; then
             echo "[OK] force_load found in resolved build settings"
@@ -317,12 +323,12 @@ jobs:
             echo "This means the xcconfig conditional settings are not being applied correctly"
             echo ""
             echo "All OTHER_LDFLAGS entries:"
-            echo "$SETTINGS" | grep "OTHER_LDFLAGS" | head -10
+            echo "$SETTINGS" | grep "OTHER_LDFLAGS" | head -10 || echo "No OTHER_LDFLAGS found"
           fi
           
           echo ""
           echo "LIBRARY_SEARCH_PATHS:"
-          echo "$SETTINGS" | grep "LIBRARY_SEARCH_PATHS" | head -5
+          echo "$SETTINGS" | grep "LIBRARY_SEARCH_PATHS" | head -5 || echo "No LIBRARY_SEARCH_PATHS found"
           
           # Check the Xcode project file directly for build settings
           echo ""
@@ -334,6 +340,7 @@ jobs:
             echo "[WARNING] force_load NOT found directly in Xcode project file"
             echo "This is expected if using xcconfig, but indicates the post_install Xcodeproj patching may have failed"
           fi
+        continue-on-error: true
 
       - name: Build example for iOS
         run: |
@@ -342,13 +349,14 @@ jobs:
           
           cd example
           
-          # Build for a specific simulator
-          # Using a specific destination for proper xcconfig resolution
+          # Build for simulator using -sdk flag (more reliable than -destination)
+          # This builds for the current architecture of the Mac runner
           if ! xcodebuild \
             -workspace ios/SherpaOnnxSttExample.xcworkspace \
             -scheme SherpaOnnxSttExample \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -sdk iphonesimulator \
+            -arch arm64 \
             -derivedDataPath ios/build \
             CODE_SIGNING_ALLOWED=NO \
             > /tmp/build.full.log 2>&1; then

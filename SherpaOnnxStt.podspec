@@ -77,8 +77,6 @@ Pod::Spec.new do |s|
   }
   
   # Settings that propagate to the app target for final linking
-  # Note: force_load is added via Podfile post_install hook to work around
-  # xcconfig conditional inheritance issues
   s.user_target_xcconfig = {
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
     'CLANG_CXX_LIBRARY' => 'libc++',
