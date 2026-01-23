@@ -2,6 +2,8 @@ name: Create Release
 
 on:
   push:
+    tags:
+      - 'v*'
 
 jobs:
   trigger-builds:
@@ -9,6 +11,7 @@ jobs:
     permissions:
       contents: read
       actions: write
+      checks: read
     outputs:
       ios_run_id: ${{ steps.find-runs.outputs.ios_run_id }}
       android_run_id: ${{ steps.find-runs.outputs.android_run_id }}
@@ -48,75 +51,107 @@ jobs:
             });
             console.log('Triggered Android workflow');
 
-      - name: Wait for iOS workflow to complete
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.ref }}
-          check-name: 'build-ios'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-          allowed-conclusions: success
-
-      - name: Wait for Android workflow to complete
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.ref }}
-          check-name: 'build-android'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-          allowed-conclusions: success
-
-      - name: Find iOS workflow run
-        id: ios-run
+      - name: Wait for iOS and Android workflows to complete
+        id: wait-workflows
         uses: actions/github-script@v7
         with:
           script: |
-            const runs = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'ios.yml',
-              ref: '${{ github.ref }}',
-              status: 'success',
-              per_page: 1
-            });
+            const maxWaitTime = 60 * 60 * 1000; // 60 minutes
+            const checkInterval = 30 * 1000; // 30 seconds
+            const startTime = Date.now();
             
-            if (runs.data.workflow_runs.length === 0) {
-              throw new Error('No successful iOS workflow run found');
+            let iosRunId = null;
+            let androidRunId = null;
+            
+            console.log('Waiting for iOS and Android workflows to complete...');
+            
+            while (Date.now() - startTime < maxWaitTime) {
+              // Check iOS workflow
+              if (!iosRunId) {
+                const iosRuns = await github.rest.actions.listWorkflowRuns({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: 'ios.yml',
+                  ref: '${{ github.ref }}',
+                  per_page: 5
+                });
+                
+                // Find the most recent run that was triggered after we started
+                const recentIosRun = iosRuns.data.workflow_runs.find(run => 
+                  new Date(run.created_at) >= new Date(startTime - 60000) // 1 minute buffer
+                );
+                
+                if (recentIosRun) {
+                  if (recentIosRun.status === 'completed') {
+                    if (recentIosRun.conclusion === 'success') {
+                      iosRunId = recentIosRun.id;
+                      console.log(`✓ iOS workflow completed successfully: ${iosRunId}`);
+                    } else {
+                      throw new Error(`iOS workflow failed with conclusion: ${recentIosRun.conclusion}`);
+                    }
+                  } else {
+                    console.log(`iOS workflow status: ${recentIosRun.status} (run ${recentIosRun.id})`);
+                  }
+                }
+              }
+              
+              // Check Android workflow
+              if (!androidRunId) {
+                const androidRuns = await github.rest.actions.listWorkflowRuns({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: 'android.yml',
+                  ref: '${{ github.ref }}',
+                  per_page: 5
+                });
+                
+                // Find the most recent run that was triggered after we started
+                const recentAndroidRun = androidRuns.data.workflow_runs.find(run => 
+                  new Date(run.created_at) >= new Date(startTime - 60000) // 1 minute buffer
+                );
+                
+                if (recentAndroidRun) {
+                  if (recentAndroidRun.status === 'completed') {
+                    if (recentAndroidRun.conclusion === 'success') {
+                      androidRunId = recentAndroidRun.id;
+                      console.log(`✓ Android workflow completed successfully: ${androidRunId}`);
+                    } else {
+                      throw new Error(`Android workflow failed with conclusion: ${recentAndroidRun.conclusion}`);
+                    }
+                  } else {
+                    console.log(`Android workflow status: ${recentAndroidRun.status} (run ${recentAndroidRun.id})`);
+                  }
+                }
+              }
+              
+              // If both workflows are complete, break
+              if (iosRunId && androidRunId) {
+                break;
+              }
+              
+              // Wait before next check
+              await new Promise(resolve => setTimeout(resolve, checkInterval));
             }
             
-            const runId = runs.data.workflow_runs[0].id;
-            core.setOutput('run_id', runId);
-            console.log(`Found iOS workflow run: ${runId}`);
-
-      - name: Find Android workflow run
-        id: android-run
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const runs = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'android.yml',
-              ref: '${{ github.ref }}',
-              status: 'success',
-              per_page: 1
-            });
-            
-            if (runs.data.workflow_runs.length === 0) {
-              throw new Error('No successful Android workflow run found');
+            if (!iosRunId) {
+              throw new Error('iOS workflow did not complete within timeout period');
             }
             
-            const runId = runs.data.workflow_runs[0].id;
-            core.setOutput('run_id', runId);
-            console.log(`Found Android workflow run: ${runId}`);
+            if (!androidRunId) {
+              throw new Error('Android workflow did not complete within timeout period');
+            }
+            
+            core.setOutput('ios_run_id', iosRunId);
+            core.setOutput('android_run_id', androidRunId);
+            console.log(`\n✓ Both workflows completed successfully!`);
+            console.log(`  iOS run ID: ${iosRunId}`);
+            console.log(`  Android run ID: ${androidRunId}`);
 
       - name: Output workflow run IDs
         id: find-runs
         run: |
-          echo "iOS workflow run ID: ${{ steps.ios-run.outputs.run_id }}"
-          echo "Android workflow run ID: ${{ steps.android-run.outputs.run_id }}"
-          echo "ios_run_id=${{ steps.ios-run.outputs.run_id }}" >> $GITHUB_OUTPUT
-          echo "android_run_id=${{ steps.android-run.outputs.run_id }}" >> $GITHUB_OUTPUT
+          echo "ios_run_id=${{ steps.wait-workflows.outputs.ios_run_id }}" >> $GITHUB_OUTPUT
+          echo "android_run_id=${{ steps.wait-workflows.outputs.android_run_id }}" >> $GITHUB_OUTPUT
 
   create-release:
     runs-on: ubuntu-latest
