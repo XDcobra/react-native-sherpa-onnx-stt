@@ -129,197 +129,73 @@ jobs:
           echo "Tag name: $TAG_NAME"
 
       - name: Download iOS app bundle artifact
-        uses: actions/github-script@v7
+        uses: actions/download-artifact@v7
         with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            
-            const iosRunId = '${{ needs.trigger-builds.outputs.ios_run_id }}';
-            
-            console.log(`Looking for iOS workflow run: ${iosRunId}`);
-            
-            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: parseInt(iosRunId)
-            });
-            
-            console.log(`Found ${artifacts.data.artifacts.length} artifacts`);
-            artifacts.data.artifacts.forEach(a => {
-              console.log(`  - ${a.name} (${a.size_in_bytes} bytes)`);
-            });
-            
-            const iosArtifact = artifacts.data.artifacts.find(a => a.name === 'ios-app-bundle');
-            if (!iosArtifact) {
-              throw new Error('iOS app bundle artifact not found');
-            }
-            
-            console.log(`Downloading artifact: ${iosArtifact.name} (ID: ${iosArtifact.id})`);
-            
-            // Get download URL - this returns a redirect URL
-            const downloadResponse = await github.rest.actions.downloadArtifact({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              artifact_id: iosArtifact.id,
-              archive_format: 'zip'
-            });
-            
-            // Follow the redirect and download
-            const downloadUrl = downloadResponse.url || downloadResponse.data?.url;
-            if (!downloadUrl) {
-              throw new Error('No download URL returned from API');
-            }
-            
-            console.log(`Download URL: ${downloadUrl}`);
-            
-            const fetch = (await import('node-fetch')).default;
-            const response = await fetch(downloadUrl, {
-              headers: {
-                'Authorization': `token ${process.env.GITHUB_TOKEN}`,
-                'Accept': 'application/vnd.github+json'
-              }
-            });
-            
-            if (!response.ok) {
-              throw new Error(`Failed to download artifact: ${response.status} ${response.statusText}`);
-            }
-            
-            const arrayBuffer = await response.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            
-            const artifactPath = 'artifacts/ios';
-            fs.mkdirSync(artifactPath, { recursive: true });
-            const zipPath = path.join(artifactPath, 'artifact.zip');
-            fs.writeFileSync(zipPath, buffer);
-            
-            const stats = fs.statSync(zipPath);
-            console.log(`Downloaded iOS artifact: ${iosArtifact.name} (${stats.size} bytes)`);
+          name: ios-app-bundle
+          run-id: ${{ needs.trigger-builds.outputs.ios_run_id }}
+          path: artifacts/ios
 
-      - name: Extract iOS artifact
+      - name: Verify iOS artifact
         run: |
-          echo "Extracting iOS artifact..."
-          cd artifacts/ios
-          
-          if [ ! -f "artifact.zip" ]; then
-            echo "Error: artifact.zip not found in artifacts/ios"
-            echo "Current directory: $(pwd)"
-            echo "Contents of artifacts/ios:"
-            ls -la || echo "Directory is empty"
+          echo "Verifying iOS artifact..."
+          if [ ! -d "artifacts/ios" ]; then
+            echo "Error: artifacts/ios directory not found"
             exit 1
           fi
           
-          echo "Found artifact.zip ($(stat -f%z artifact.zip 2>/dev/null || stat -c%s artifact.zip) bytes), extracting..."
-          unzip -q artifact.zip
+          echo "Contents of artifacts/ios:"
+          find artifacts/ios -type f -name "*.ipa" || find artifacts/ios -type d -name "*.app" || ls -la artifacts/ios
           
-          echo "Extraction complete. Contents:"
-          find . -type f -name "*.ipa" || find . -type d -name "*.app" || ls -la
-          
-          rm artifact.zip
-          cd ../..
+          IPA_COUNT=$(find artifacts/ios -name "*.ipa" -type f | wc -l)
+          if [ "$IPA_COUNT" -eq 0 ]; then
+            echo "Warning: No IPA file found in artifacts/ios"
+          else
+            echo "Found $IPA_COUNT IPA file(s)"
+          fi
 
       - name: Download Android APK artifact
-        uses: actions/github-script@v7
+        uses: actions/download-artifact@v7
         with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            
-            const androidRunId = '${{ needs.trigger-builds.outputs.android_run_id }}';
-            
-            console.log(`Looking for Android workflow run: ${androidRunId}`);
-            
-            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: parseInt(androidRunId)
-            });
-            
-            console.log(`Found ${artifacts.data.artifacts.length} artifacts`);
-            artifacts.data.artifacts.forEach(a => {
-              console.log(`  - ${a.name} (${a.size_in_bytes} bytes)`);
-            });
-            
-            const androidArtifact = artifacts.data.artifacts.find(a => a.name === 'android-debug-apk');
-            if (!androidArtifact) {
-              throw new Error('Android APK artifact not found');
-            }
-            
-            console.log(`Downloading artifact: ${androidArtifact.name} (ID: ${androidArtifact.id})`);
-            
-            // Get download URL - this returns a redirect URL
-            const downloadResponse = await github.rest.actions.downloadArtifact({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              artifact_id: androidArtifact.id,
-              archive_format: 'zip'
-            });
-            
-            // Follow the redirect and download
-            const downloadUrl = downloadResponse.url || downloadResponse.data?.url;
-            if (!downloadUrl) {
-              throw new Error('No download URL returned from API');
-            }
-            
-            console.log(`Download URL: ${downloadUrl}`);
-            
-            const fetch = (await import('node-fetch')).default;
-            const response = await fetch(downloadUrl, {
-              headers: {
-                'Authorization': `token ${process.env.GITHUB_TOKEN}`,
-                'Accept': 'application/vnd.github+json'
-              }
-            });
-            
-            if (!response.ok) {
-              throw new Error(`Failed to download artifact: ${response.status} ${response.statusText}`);
-            }
-            
-            const arrayBuffer = await response.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            
-            const artifactPath = 'artifacts/android';
-            fs.mkdirSync(artifactPath, { recursive: true });
-            const zipPath = path.join(artifactPath, 'artifact.zip');
-            fs.writeFileSync(zipPath, buffer);
-            
-            const stats = fs.statSync(zipPath);
-            console.log(`Downloaded Android artifact: ${androidArtifact.name} (${stats.size} bytes)`);
+          name: android-debug-apk
+          run-id: ${{ needs.trigger-builds.outputs.android_run_id }}
+          path: artifacts/android
 
-      - name: Extract Android artifact
+      - name: Verify and organize Android artifact
         run: |
-          echo "Extracting Android artifact..."
-          cd artifacts/android
-          
-          if [ ! -f "artifact.zip" ]; then
-            echo "Error: artifact.zip not found in artifacts/android"
-            echo "Current directory: $(pwd)"
-            echo "Contents of artifacts/android:"
-            ls -la || echo "Directory is empty"
+          echo "Verifying Android artifact..."
+          if [ ! -d "artifacts/android" ]; then
+            echo "Error: artifacts/android directory not found"
             exit 1
           fi
           
-          echo "Found artifact.zip ($(stat -f%z artifact.zip 2>/dev/null || stat -c%s artifact.zip) bytes), extracting..."
-          unzip -q artifact.zip -d .
+          cd artifacts/android
           
-          # The APK might be in a subdirectory, find and move it
+          echo "Contents of artifacts/android:"
+          ls -la || echo "Directory is empty"
+          
+          # The APK might be in a subdirectory, find and move it to root if needed
           if [ -f "app-debug.apk" ]; then
             echo "Found APK at root"
-          elif [ -f "*/app-debug.apk" ]; then
-            mv */app-debug.apk app-debug.apk
-            echo "Moved APK to root"
           else
-            echo "APK structure:"
+            echo "Searching for APK files..."
             find . -name "*.apk" -type f
-            # Try to find and copy the APK
+            
+            # Try to find and copy the APK to root
             APK_FILE=$(find . -name "*.apk" -type f | head -1)
             if [ -n "$APK_FILE" ]; then
-              cp "$APK_FILE" app-debug.apk
-              echo "Copied APK: $APK_FILE"
+              # Get just the filename
+              APK_NAME=$(basename "$APK_FILE")
+              if [ "$APK_NAME" != "app-debug.apk" ]; then
+                cp "$APK_FILE" app-debug.apk
+                echo "Copied APK: $APK_FILE -> app-debug.apk"
+              fi
+            else
+              echo "Warning: No APK file found in artifacts/android"
             fi
           fi
           
-          rm -f artifact.zip
+          APK_COUNT=$(find . -name "*.apk" -type f | wc -l)
+          echo "Found $APK_COUNT APK file(s)"
           cd ../..
 
       - name: Prepare release assets
