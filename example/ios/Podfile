@@ -33,58 +33,75 @@ target 'SherpaOnnxSttExample' do
       # :ccache_enabled => true
     )
     
-    # Debug: Print paths for verification
-    puts "\n[DEBUG] ========================================"
-    puts "[DEBUG] Verifying SherpaOnnxStt configuration..."
-    
-    # Find SherpaOnnxStt pod
+    # Find SherpaOnnxStt pod and include its xcconfig for proper linking
     sherpa_pod = installer.pod_targets.find { |t| t.name == 'SherpaOnnxStt' }
     if sherpa_pod
       sherpa_pod_path = installer.sandbox.pod_dir('SherpaOnnxStt').to_s
-      puts "[DEBUG] SherpaOnnxStt pod path: #{sherpa_pod_path}"
+      sherpa_xcconfig = File.join(sherpa_pod_path, 'ios', 'SherpaOnnxStt.xcconfig')
       
-      # Verify XCFramework exists
+      puts "\n[SherpaOnnxStt] Configuring linker flags..."
+      puts "[SherpaOnnxStt] Pod path: #{sherpa_pod_path}"
+      
       xcframework_path = File.join(sherpa_pod_path, 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
-      if File.exist?(xcframework_path)
-        puts "[DEBUG] XCFramework found at: #{xcframework_path}"
+      
+      if File.exist?(sherpa_xcconfig) && File.exist?(xcframework_path)
+        puts "[SherpaOnnxStt] Found xcconfig at: #{sherpa_xcconfig}"
+        puts "[SherpaOnnxStt] Found XCFramework at: #{xcframework_path}"
         
-        # List architecture slices
-        Dir.glob(File.join(xcframework_path, '*')).each do |slice|
-          if File.directory?(slice)
-            lib_file = File.join(slice, 'libsherpa-onnx.a')
-            if File.exist?(lib_file)
-              puts "[DEBUG]   - #{File.basename(slice)}/libsherpa-onnx.a [EXISTS]"
-            else
-              puts "[DEBUG]   - #{File.basename(slice)}/ [NO .a FILE]"
+        # Include the SherpaOnnxStt.xcconfig in the app's aggregated xcconfig files
+        # First set SHERPA_ONNX_FRAMEWORK_PATH, then include the xcconfig
+        pods_dir = installer.sandbox.root
+        xcconfig_paths = Dir.glob(File.join(pods_dir, 'Target Support Files', 'Pods-SherpaOnnxSttExample', '*.xcconfig'))
+        
+        xcconfig_paths.each do |xcconfig_path|
+          puts "[SherpaOnnxStt] Patching: #{File.basename(xcconfig_path)}"
+          content = File.read(xcconfig_path)
+          
+          # Check if already includes our xcconfig
+          if content.include?('SherpaOnnxStt.xcconfig')
+            puts "[SherpaOnnxStt]   Already includes SherpaOnnxStt.xcconfig"
+            next
+          end
+          
+          # Add the framework path variable and include directive
+          # The xcconfig uses SHERPA_ONNX_FRAMEWORK_PATH to build conditional paths
+          content += "\n"
+          content += "// SherpaOnnxStt: Set framework path and include xcconfig for conditional library linking\n"
+          content += "SHERPA_ONNX_FRAMEWORK_PATH = #{xcframework_path}\n"
+          content += "#include \"#{sherpa_xcconfig}\"\n"
+          
+          File.write(xcconfig_path, content)
+          puts "[SherpaOnnxStt]   Added SHERPA_ONNX_FRAMEWORK_PATH and #include"
+        end
+        
+        puts "[SherpaOnnxStt] Configuration complete"
+      else
+        puts "[SherpaOnnxStt] WARNING: xcconfig not found at #{sherpa_xcconfig}"
+        puts "[SherpaOnnxStt] Falling back to manual patching..."
+        
+        # Fallback: manually patch if xcconfig doesn't exist
+        xcframework_path = File.join(sherpa_pod_path, 'ios', 'Frameworks', 'sherpa_onnx.xcframework')
+        if File.exist?(xcframework_path)
+          device_lib = File.join(xcframework_path, 'ios-arm64', 'libsherpa-onnx.a')
+          simulator_lib = File.join(xcframework_path, 'ios-arm64_x86_64-simulator', 'libsherpa-onnx.a')
+          
+          pods_dir = installer.sandbox.root
+          xcconfig_paths = Dir.glob(File.join(pods_dir, 'Target Support Files', 'Pods-SherpaOnnxSttExample', '*.xcconfig'))
+          
+          xcconfig_paths.each do |xcconfig_path|
+            content = File.read(xcconfig_path)
+            base_ldflags_match = content.match(/^OTHER_LDFLAGS\s*=\s*(.+)$/m)
+            if base_ldflags_match
+              base_ldflags = base_ldflags_match[1].strip
+              content = content.gsub(/^OTHER_LDFLAGS\[sdk=.*\].*\n/, '')
+              content += "\n// SherpaOnnxStt: Force load (fallback)\n"
+              content += "OTHER_LDFLAGS[sdk=iphoneos*] = #{base_ldflags} -force_load \"#{device_lib}\"\n"
+              content += "OTHER_LDFLAGS[sdk=iphonesimulator*] = #{base_ldflags} -force_load \"#{simulator_lib}\"\n"
+              File.write(xcconfig_path, content)
             end
           end
         end
-      else
-        puts "[DEBUG] ERROR: XCFramework NOT found at: #{xcframework_path}"
       end
-      
-      # Print build settings for SherpaOnnxStt target
-      installer.pods_project.targets.each do |target|
-        if target.name == 'SherpaOnnxStt'
-          puts "[DEBUG] Build settings for SherpaOnnxStt target:"
-          target.build_configurations.each do |config|
-            puts "[DEBUG]   Configuration: #{config.name}"
-            
-            lib_dir = config.build_settings['SHERPA_ONNX_LIB_DIR']
-            puts "[DEBUG]     SHERPA_ONNX_LIB_DIR: #{lib_dir || '(not set - will use conditional)'}"
-            
-            lib_search = config.build_settings['LIBRARY_SEARCH_PATHS']
-            puts "[DEBUG]     LIBRARY_SEARCH_PATHS: #{lib_search || '(inherited)'}"
-            
-            ldflags = config.build_settings['OTHER_LDFLAGS']
-            puts "[DEBUG]     OTHER_LDFLAGS: #{ldflags || '(inherited)'}"
-          end
-        end
-      end
-    else
-      puts "[DEBUG] ERROR: SherpaOnnxStt pod target not found!"
     end
-    
-    puts "[DEBUG] ========================================\n"
   end
 end
