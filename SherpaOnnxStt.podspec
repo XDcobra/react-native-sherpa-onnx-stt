@@ -62,29 +62,24 @@ Pod::Spec.new do |s|
     'ios/include/**/*'
   ]
   
-  # Static library linkage settings
-  # Compute library paths for device and simulator at pod install time
-  device_lib_path = File.join(framework_path, 'ios-arm64', 'libsherpa-onnx.a')
-  simulator_lib_path = File.join(framework_path, 'ios-arm64_x86_64-simulator', 'libsherpa-onnx.a')
+  # Note: vendored_frameworks automatically handles linking the XCFramework
+  # No need for manual LIBRARY_SEARCH_PATHS or force_load configuration
   
   s.pod_target_xcconfig = {
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
     'CLANG_CXX_LIBRARY' => 'libc++',
     # Header search paths - use absolute path computed at pod install time
     'HEADER_SEARCH_PATHS' => "$(inherited) \"#{ios_include_path}\"",
-    # Library search paths for both device and simulator
-    'LIBRARY_SEARCH_PATHS' => "$(inherited) \"#{File.join(framework_path, 'ios-arm64')}\" \"#{File.join(framework_path, 'ios-arm64_x86_64-simulator')}\""
+    # Note: LIBRARY_SEARCH_PATHS removed - vendored_frameworks handles linking automatically
+    # Adding LIBRARY_SEARCH_PATHS was causing duplicate symbol errors
   }
   
   # Settings that propagate to the app target for final linking
   s.user_target_xcconfig = {
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
     'CLANG_CXX_LIBRARY' => 'libc++',
-    # Library search paths for the app - include both so linker can find either
-    'LIBRARY_SEARCH_PATHS' => "$(inherited) \"#{File.join(framework_path, 'ios-arm64')}\" \"#{File.join(framework_path, 'ios-arm64_x86_64-simulator')}\"",
-    # Store paths as variables for use by Podfile post_install hook
-    'SHERPA_ONNX_DEVICE_LIB' => device_lib_path,
-    'SHERPA_ONNX_SIMULATOR_LIB' => simulator_lib_path
+    # Note: LIBRARY_SEARCH_PATHS removed - vendored_frameworks handles linking automatically
+    # SHERPA_ONNX_DEVICE_LIB and SHERPA_ONNX_SIMULATOR_LIB removed as they're no longer needed
   }
   
 
