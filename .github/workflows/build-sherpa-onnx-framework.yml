@@ -167,10 +167,15 @@ jobs:
             exit 1
           fi
           
+          # IMPORTANT: Remove existing framework first to avoid nesting issues
+          # cp -R on macOS copies INTO existing directories instead of replacing them
+          echo "Removing existing framework (if any)..."
+          rm -rf "ios/Frameworks/$TARGET_FRAMEWORK"
+          
           # Copy framework to target location
           cp -R "sherpa-onnx-source/build-ios/$SOURCE_FRAMEWORK" "ios/Frameworks/$TARGET_FRAMEWORK"
           
-          # Verify copy
+          # Verify copy succeeded
           if [ ! -d "ios/Frameworks/$TARGET_FRAMEWORK" ]; then
             echo "Error: Failed to copy XCFramework"
             exit 1
@@ -178,6 +183,41 @@ jobs:
           
           echo "Framework copied successfully to ios/Frameworks/$TARGET_FRAMEWORK"
           du -sh ios/Frameworks/$TARGET_FRAMEWORK
+
+      - name: Verify library sizes
+        run: |
+          echo "Verifying library sizes contain ONNX Runtime..."
+          MIN_SIZE=52428800  # 50MB in bytes - libraries with ONNX Runtime should be >50MB
+          
+          DEVICE_LIB="ios/Frameworks/sherpa_onnx.xcframework/ios-arm64/libsherpa-onnx.a"
+          SIM_LIB="ios/Frameworks/sherpa_onnx.xcframework/ios-arm64_x86_64-simulator/libsherpa-onnx.a"
+          
+          for lib in "$DEVICE_LIB" "$SIM_LIB"; do
+            if [ ! -f "$lib" ]; then
+              echo "ERROR: Library not found: $lib"
+              echo "Contents of ios/Frameworks/sherpa_onnx.xcframework:"
+              find ios/Frameworks/sherpa_onnx.xcframework -type f -name "*.a" 2>/dev/null || echo "No .a files found!"
+              exit 1
+            fi
+            
+            size_bytes=$(stat -f%z "$lib" 2>/dev/null || stat -c%s "$lib")
+            size_human=$(ls -lh "$lib" | awk '{print $5}')
+            
+            echo "  $lib: $size_human ($size_bytes bytes)"
+            
+            if [ "$size_bytes" -lt "$MIN_SIZE" ]; then
+              echo ""
+              echo "ERROR: Library is too small! ONNX Runtime was NOT properly merged."
+              echo "  Expected: >50MB"
+              echo "  Got: $size_human"
+              echo ""
+              echo "This indicates a problem with the 'Add ONNX Runtime to XCFramework' step."
+              exit 1
+            fi
+          done
+          
+          echo ""
+          echo "SUCCESS: Both libraries are correctly sized with ONNX Runtime included."
 
       - name: Create version info file
         run: |
@@ -241,20 +281,29 @@ jobs:
             rm -f ios/Frameworks/.gitkeep
           fi
           
-          # Check if there are changes
-          if git diff --quiet ios/Frameworks/ 2>/dev/null && [ -z "$(git ls-files --others --exclude-standard ios/Frameworks/)" ]; then
-            echo "No changes to commit"
-            exit 0
-          fi
+          # Remove any cached/staged versions of the old files first
+          # This is important when replacing LFS pointer files with actual content
+          git rm -rf --cached ios/Frameworks/sherpa_onnx.xcframework 2>/dev/null || true
           
-          # Only add the framework (ZIP is ignored by .gitignore and not needed in repo)
-          # Git LFS will automatically handle the .a files
+          # Add the framework files fresh
+          # Git LFS will automatically handle the .a files based on .gitattributes
           git add ios/Frameworks/sherpa_onnx.xcframework
           git add ios/Frameworks/.gitkeep 2>/dev/null || true
           
           # Verify files are tracked by LFS
-          echo "Checking Git LFS tracking:"
-          git lfs ls-files | grep -E "\.a$" | head -5 || echo "No .a files tracked yet (will be tracked after commit)"
+          echo "Checking Git LFS tracking for staged files:"
+          git lfs status | head -20
+          
+          # Verify actual file sizes being committed
+          echo ""
+          echo "Verifying file sizes in staging area:"
+          for arch in ios-arm64 ios-arm64_x86_64-simulator; do
+            lib="ios/Frameworks/sherpa_onnx.xcframework/$arch/libsherpa-onnx.a"
+            if [ -f "$lib" ]; then
+              size_human=$(ls -lh "$lib" | awk '{print $5}')
+              echo "  $arch: $size_human"
+            fi
+          done
           
           # Check if there are staged changes
           if git diff --cached --quiet; then
@@ -268,14 +317,20 @@ jobs:
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           
           # Push LFS objects first, then the commit
-          git lfs push origin HEAD:${{ github.ref_name }} || echo "No LFS objects to push (may already be pushed)"
+          echo ""
+          echo "Pushing LFS objects..."
+          git lfs push origin HEAD:${{ github.ref_name }} --all
           
           # Push to current branch
+          echo "Pushing commit..."
           git push origin HEAD:${{ github.ref_name }}
+          
+          echo ""
+          echo "Successfully committed and pushed framework with ONNX Runtime included."
 
       - name: Summary
         run: |
-          echo "## ✅ sherpa-onnx XCFramework Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## sherpa-onnx XCFramework Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version:** ${{ env.SHERPA_ONNX_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Framework Location:** \`ios/Frameworks/sherpa_onnx.xcframework\`" >> $GITHUB_STEP_SUMMARY

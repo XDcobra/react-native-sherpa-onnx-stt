@@ -68,13 +68,25 @@ jobs:
           
           echo ""
           echo "Verifying architecture slices:"
+          MIN_SIZE=52428800  # 50MB - libraries with ONNX Runtime should be >50MB
+          
           for arch in ios-arm64 ios-arm64_x86_64-simulator; do
             lib="ios/Frameworks/sherpa_onnx.xcframework/$arch/libsherpa-onnx.a"
             if [ -f "$lib" ]; then
-              size=$(ls -lh "$lib" | awk '{print $5}')
-              echo "[OK] $arch/libsherpa-onnx.a ($size)"
+              size_human=$(ls -lh "$lib" | awk '{print $5}')
+              size_bytes=$(stat -f%z "$lib" 2>/dev/null || stat -c%s "$lib")
+              echo "[OK] $arch/libsherpa-onnx.a ($size_human, $size_bytes bytes)"
+              
+              # Check if library is large enough (should include ONNX Runtime)
+              if [ "$size_bytes" -lt "$MIN_SIZE" ]; then
+                echo "[ERROR] Library is too small! ONNX Runtime is NOT included."
+                echo "        Expected: >50MB, Got: $size_human"
+                echo "        Please run the build-sherpa-onnx-framework workflow to rebuild with ONNX Runtime."
+                exit 1
+              fi
             else
               echo "[ERROR] $arch/libsherpa-onnx.a NOT FOUND"
+              exit 1
             fi
           done
 
