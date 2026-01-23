@@ -59,12 +59,12 @@ jobs:
             const maxWaitTime = 60 * 60 * 1000; // 60 minutes
             const checkInterval = 30 * 1000; // 30 seconds
             const startTime = Date.now();
-            
+
             let iosRunId = null;
             let androidRunId = null;
-            
+
             console.log('Waiting for iOS and Android workflows to complete...');
-            
+
             while (Date.now() - startTime < maxWaitTime) {
               // Check iOS workflow
               if (!iosRunId) {
@@ -132,15 +132,15 @@ jobs:
               // Wait before next check
               await new Promise(resolve => setTimeout(resolve, checkInterval));
             }
-            
+
             if (!iosRunId) {
               throw new Error('iOS workflow did not complete within timeout period');
             }
-            
+
             if (!androidRunId) {
               throw new Error('Android workflow did not complete within timeout period');
             }
-            
+
             core.setOutput('ios_run_id', iosRunId);
             core.setOutput('android_run_id', androidRunId);
             console.log(`\n✓ Both workflows completed successfully!`);
@@ -157,7 +157,7 @@ jobs:
         with:
           script: |
             console.log('Finding existing workflow runs for tag: ${{ github.ref }}');
-            
+
             // Find iOS workflow run
             const iosRuns = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
@@ -166,17 +166,17 @@ jobs:
               ref: '${{ github.ref }}',
               per_page: 10
             });
-            
+
             const completedIosRun = iosRuns.data.workflow_runs.find(run => 
               run.status === 'completed' && run.conclusion === 'success'
             );
-            
+
             if (!completedIosRun) {
               throw new Error('No completed iOS workflow run found for this tag');
             }
-            
+
             console.log(`✓ Found iOS workflow run: ${completedIosRun.id} (${completedIosRun.created_at})`);
-            
+
             // Find Android workflow run
             const androidRuns = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
@@ -185,17 +185,17 @@ jobs:
               ref: '${{ github.ref }}',
               per_page: 10
             });
-            
+
             const completedAndroidRun = androidRuns.data.workflow_runs.find(run => 
               run.status === 'completed' && run.conclusion === 'success'
             );
-            
+
             if (!completedAndroidRun) {
               throw new Error('No completed Android workflow run found for this tag');
             }
-            
+
             console.log(`✓ Found Android workflow run: ${completedAndroidRun.id} (${completedAndroidRun.created_at})`);
-            
+
             core.setOutput('ios_run_id', completedIosRun.id);
             core.setOutput('android_run_id', completedAndroidRun.id);
             console.log(`\n✓ Using existing workflow runs:`);
@@ -233,23 +233,23 @@ jobs:
             const iosRunId = '${{ needs.trigger-builds.outputs.ios_run_id }}';
             const expectedTag = '${{ github.ref }}';
             const expectedTagName = expectedTag.replace('refs/tags/', '');
-            
+
             console.log(`Checking artifacts for iOS run ID: ${iosRunId}`);
             console.log(`Expected tag: ${expectedTagName} (${expectedTag})`);
-            
+
             // Get workflow run details to validate it matches the tag
             const run = await github.rest.actions.getWorkflowRun({
               owner: context.repo.owner,
               repo: context.repo.repo,
               run_id: parseInt(iosRunId)
             });
-            
+
             console.log(`\nWorkflow run details:`);
             console.log(`  - Head branch/ref: ${run.data.head_branch || run.data.head_repository?.default_branch || 'N/A'}`);
             console.log(`  - Head SHA: ${run.data.head_sha}`);
             console.log(`  - Status: ${run.data.status}, Conclusion: ${run.data.conclusion}`);
             console.log(`  - Created: ${run.data.created_at}`);
-            
+
             // Validate that the run is for the correct tag
             // Note: head_branch might be null for tag-triggered runs, so we check head_sha matches
             const currentSha = '${{ github.sha }}';
@@ -258,18 +258,18 @@ jobs:
             } else {
               console.log(`✓ Run SHA matches current tag SHA`);
             }
-            
+
             const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
               owner: context.repo.owner,
               repo: context.repo.repo,
               run_id: parseInt(iosRunId)
             });
-            
+
             console.log(`\nFound ${artifacts.data.artifacts.length} artifact(s):`);
             artifacts.data.artifacts.forEach(a => {
               console.log(`  - Name: "${a.name}" (ID: ${a.id}, Size: ${a.size_in_bytes} bytes, Created: ${a.created_at})`);
             });
-            
+
             const iosArtifact = artifacts.data.artifacts.find(a => a.name === 'ios-app-bundle');
             if (!iosArtifact) {
               console.error('ERROR: Artifact "ios-app-bundle" not found!');
@@ -294,10 +294,10 @@ jobs:
             echo "Error: artifacts/ios directory not found"
             exit 1
           fi
-          
+
           echo "Contents of artifacts/ios:"
           find artifacts/ios -type f -name "*.ipa" || find artifacts/ios -type d -name "*.app" || ls -la artifacts/ios
-          
+
           IPA_COUNT=$(find artifacts/ios -name "*.ipa" -type f | wc -l)
           if [ "$IPA_COUNT" -eq 0 ]; then
             echo "Warning: No IPA file found in artifacts/ios"
@@ -312,23 +312,23 @@ jobs:
             const androidRunId = '${{ needs.trigger-builds.outputs.android_run_id }}';
             const expectedTag = '${{ github.ref }}';
             const expectedTagName = expectedTag.replace('refs/tags/', '');
-            
+
             console.log(`Checking artifacts for Android run ID: ${androidRunId}`);
             console.log(`Expected tag: ${expectedTagName} (${expectedTag})`);
-            
+
             // Get workflow run details to validate it matches the tag
             const run = await github.rest.actions.getWorkflowRun({
               owner: context.repo.owner,
               repo: context.repo.repo,
               run_id: parseInt(androidRunId)
             });
-            
+
             console.log(`\nWorkflow run details:`);
             console.log(`  - Head branch/ref: ${run.data.head_branch || run.data.head_repository?.default_branch || 'N/A'}`);
             console.log(`  - Head SHA: ${run.data.head_sha}`);
             console.log(`  - Status: ${run.data.status}, Conclusion: ${run.data.conclusion}`);
             console.log(`  - Created: ${run.data.created_at}`);
-            
+
             // Validate that the run is for the correct tag
             const currentSha = '${{ github.sha }}';
             if (run.data.head_sha !== currentSha) {
@@ -336,18 +336,18 @@ jobs:
             } else {
               console.log(`✓ Run SHA matches current tag SHA`);
             }
-            
+
             const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
               owner: context.repo.owner,
               repo: context.repo.repo,
               run_id: parseInt(androidRunId)
             });
-            
+
             console.log(`\nFound ${artifacts.data.artifacts.length} artifact(s):`);
             artifacts.data.artifacts.forEach(a => {
               console.log(`  - Name: "${a.name}" (ID: ${a.id}, Size: ${a.size_in_bytes} bytes, Created: ${a.created_at})`);
             });
-            
+
             const androidArtifact = artifacts.data.artifacts.find(a => a.name === 'android-debug-apk');
             if (!androidArtifact) {
               console.error('ERROR: Artifact "android-debug-apk" not found!');
@@ -372,12 +372,12 @@ jobs:
             echo "Error: artifacts/android directory not found"
             exit 1
           fi
-          
+
           cd artifacts/android
-          
+
           echo "Contents of artifacts/android:"
           ls -la || echo "Directory is empty"
-          
+
           # The APK might be in a subdirectory, find and move it to root if needed
           if [ -f "app-debug.apk" ]; then
             echo "Found APK at root"
@@ -398,7 +398,7 @@ jobs:
               echo "Warning: No APK file found in artifacts/android"
             fi
           fi
-          
+
           APK_COUNT=$(find . -name "*.apk" -type f | wc -l)
           echo "Found $APK_COUNT APK file(s)"
           cd ../..
@@ -406,7 +406,7 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          
+
           # Find and copy iOS IPA file (already a valid .ipa archive)
           IPA_FILE=$(find artifacts/ios -name "*.ipa" -type f | head -1)
           if [ -n "$IPA_FILE" ]; then
@@ -417,7 +417,7 @@ jobs:
             echo "Contents of artifacts/ios:"
             find artifacts/ios -type f || echo "No files found"
           fi
-          
+
           # Copy Android APK (check multiple possible locations)
           ANDROID_APK=$(find artifacts/android -name "*.apk" -type f | head -1)
           if [ -n "$ANDROID_APK" ]; then
@@ -428,7 +428,7 @@ jobs:
             echo "Contents of artifacts/android:"
             find artifacts/android -type f || echo "No files found"
           fi
-          
+
           # List release assets
           echo ""
           echo "Release assets prepared:"
@@ -441,15 +441,15 @@ jobs:
           name: Release ${{ steps.tag.outputs.tag_name }}
           body: |
             ## Release ${{ steps.tag.outputs.tag_name }}
-            
+
             ### iOS
             - **IPA**: `SherpaOnnxSttExample.ipa`
-            
+
             ### Android
             - **Debug APK**: `SherpaOnnxSttExample-android-debug.apk`
-            
+
             ---
-            
+
             Built from commit: ${{ github.sha }}
           files: |
             release-assets/*.ipa

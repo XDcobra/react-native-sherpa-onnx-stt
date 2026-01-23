@@ -48,14 +48,14 @@ jobs:
           # Install Git LFS
           sudo apt-get update
           sudo apt-get install -y git-lfs
-          
+
           # Initialize Git LFS
           git lfs install
-          
+
           # Pull LFS objects (this replaces pointer files with actual content)
           echo "Pulling Git LFS objects..."
           git lfs pull
-          
+
           # Verify LFS objects were pulled
           echo ""
           echo "Verifying LFS objects:"
@@ -78,7 +78,7 @@ jobs:
         run: |
           echo "Copying header files..."
           yarn copy-headers || echo "Warning: copy-headers failed, checking if headers already exist..."
-          
+
           # Verify headers were copied or already exist
           if [ ! -f "android/src/main/cpp/include/sherpa-onnx/c-api/c-api.h" ]; then
             echo "Error: Android header files not found at android/src/main/cpp/include/sherpa-onnx/c-api/c-api.h"
@@ -90,47 +90,47 @@ jobs:
       - name: Verify required files exist
         run: |
           echo "Verifying required files..."
-          
+
           # Check header files (already verified in previous step, but double-check)
           if [ ! -f "android/src/main/cpp/include/sherpa-onnx/c-api/c-api.h" ]; then
             echo "Error: Android header files not found at android/src/main/cpp/include/sherpa-onnx/c-api/c-api.h"
             exit 1
           fi
           echo "[OK] Header files found"
-          
+
           # Check CMakeLists.txt
           if [ ! -f "android/src/main/cpp/CMakeLists.txt" ]; then
             echo "Error: CMakeLists.txt not found at android/src/main/cpp/CMakeLists.txt"
             exit 1
           fi
           echo "[OK] CMakeLists.txt found"
-          
+
           # Check Android build.gradle files
           if [ ! -f "android/build.gradle" ]; then
             echo "Error: android/build.gradle not found"
             exit 1
           fi
           echo "[OK] android/build.gradle found"
-          
+
           if [ ! -f "example/android/build.gradle" ]; then
             echo "Error: example/android/build.gradle not found"
             exit 1
           fi
           echo "[OK] example/android/build.gradle found"
-          
+
           if [ ! -f "example/android/app/build.gradle" ]; then
             echo "Error: example/android/app/build.gradle not found"
             exit 1
           fi
           echo "[OK] example/android/app/build.gradle found"
-          
+
           # Check native source files
           if [ ! -f "android/src/main/cpp/jni/sherpa-onnx-stt-jni.cpp" ]; then
             echo "Error: JNI source file not found"
             exit 1
           fi
           echo "[OK] JNI source files found"
-          
+
           # Verify header file structure
           echo ""
           echo "Header file structure:"
@@ -157,12 +157,12 @@ jobs:
         run: |
           set -o pipefail
           echo "Building Android example app..."
-          
+
           cd example/android
-          
+
           # Clean previous builds
           ./gradlew clean
-          
+
           # Build debug APK
           if ! ./gradlew assembleDebug \
             --stacktrace \
@@ -170,11 +170,11 @@ jobs:
             > /tmp/build.full.log 2>&1; then
             BUILD_FAILED=1
           fi
-          
+
           # Display filtered output (errors, warnings, important messages)
           echo "=== Filtered Build Output ==="
           grep -E "(FAILED|ERROR|error:|warning:|BUILD SUCCEEDED|BUILD FAILED|FAILURE|Exception)" /tmp/build.full.log | head -100 || true
-          
+
           if [ "${BUILD_FAILED:-0}" = "1" ]; then
             echo ""
             echo "=== Build failed. Full error analysis ==="
@@ -210,15 +210,15 @@ jobs:
             tail -50 /tmp/build.full.log
             exit 1
           fi
-          
+
           echo "[OK] Android build completed successfully"
 
       - name: Verify build artifacts
         run: |
           echo "Verifying build artifacts..."
-          
+
           APK_PATH="example/android/app/build/outputs/apk/debug/app-debug.apk"
-          
+
           if [ -f "$APK_PATH" ]; then
             echo "[OK] APK found: $APK_PATH"
             
@@ -239,7 +239,7 @@ jobs:
             find example/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
             exit 1
           fi
-          
+
           # Also check for AAR if building library
           AAR_PATH="android/build/outputs/aar/android-release.aar"
           if [ -f "$AAR_PATH" ]; then
