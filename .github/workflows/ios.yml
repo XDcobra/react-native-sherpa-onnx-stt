@@ -32,6 +32,40 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          lfs: true
+
+      - name: Install Git LFS and pull LFS objects
+        run: |
+          # Install Git LFS via Homebrew (macOS runner)
+          brew install git-lfs
+          
+          # Initialize Git LFS
+          git lfs install
+          
+          # Pull LFS objects (this replaces pointer files with actual content)
+          echo "Pulling Git LFS objects..."
+          git lfs pull
+          
+          # Verify LFS objects were pulled
+          echo ""
+          echo "Verifying LFS objects:"
+          git lfs ls-files | head -5 || echo "No LFS files tracked"
+          
+          # Check if the library files are actual files (not pointers)
+          for arch in ios-arm64 ios-arm64_x86_64-simulator; do
+            lib="ios/Frameworks/sherpa_onnx.xcframework/$arch/libsherpa-onnx.a"
+            if [ -f "$lib" ]; then
+              size_bytes=$(stat -f%z "$lib" 2>/dev/null || stat -c%s "$lib")
+              size_human=$(ls -lh "$lib" | awk '{print $5}')
+              echo "  $arch: $size_human ($size_bytes bytes)"
+              
+              # If file is < 1KB, it's likely still a pointer file
+              if [ "$size_bytes" -lt 1024 ]; then
+                echo "  [WARNING] File appears to be a pointer file, not actual content!"
+              fi
+            fi
+          done
 
       - name: Setup
         uses: ./.github/actions/setup
