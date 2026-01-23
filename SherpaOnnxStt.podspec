@@ -43,8 +43,8 @@ Pod::Spec.new do |s|
         #{framework_path}
 
       You can obtain the framework by:
-      1. Downloading from GitHub Actions workflow artifacts
-      2. Building it yourself using the build-sherpa-onnx-framework.yml workflow
+      1. Using the prebuilt version included in the repository (if available)
+      2. Building it yourself (see README.md for instructions)
     MSG
   end
   

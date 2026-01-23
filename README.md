@@ -60,20 +60,25 @@ pod install
 
 #### Obtaining the XCFramework
 
-1. **Download from GitHub Actions**:
-   - Go to the [Actions tab](https://github.com/XDcobra/react-native-sherpa-onnx-stt/actions)
-   - Find the latest "Build sherpa-onnx XCFramework" workflow run
-   - Download the `sherpa-onnx-xcframework-zip-*` artifact
-   - Extract to `node_modules/react-native-sherpa-onnx-stt/ios/Frameworks/` in your project
+1. **Use the prebuilt version** (if available):
+   - The XCFramework may be included in the repository at `ios/Frameworks/sherpa_onnx.xcframework`
+   - If present, no additional steps are required
 
 2. **Build locally** (requires macOS):
    ```sh
    git clone https://github.com/k2-fsa/sherpa-onnx.git
    cd sherpa-onnx
    git checkout v1.12.23
+   
+   # Note: ONNX Runtime is required for building sherpa-onnx
+   # Make sure ONNX Runtime dependencies are installed
    ./build-ios.sh
-   cp -r build-ios/sherpa_onnx.xcframework /path/to/your/project/ios/Frameworks/
+   cp -r build-ios/sherpa_onnx.xcframework /path/to/your/project/node_modules/react-native-sherpa-onnx-stt/ios/Frameworks/
    ```
+   
+   **Important:** Building sherpa-onnx requires ONNX Runtime. Make sure all dependencies are installed before running `build-ios.sh`.
+   
+   Replace `/path/to/your/project/` with the actual path to your React Native project. The framework should be copied to `node_modules/react-native-sherpa-onnx-stt/ios/Frameworks/` in your project.
 
 The Podspec will automatically detect and use the framework if it exists in `ios/Frameworks/`.
 
